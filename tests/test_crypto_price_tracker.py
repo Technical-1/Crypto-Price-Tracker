@@ -76,3 +76,23 @@ def test_main_skips_zero_total_holding(capsys):
     captured = capsys.readouterr()
     assert "bitcoin" not in captured.out      # not in the table
     assert "bitcoin" in captured.err          # skip notice on stderr
+
+
+def test_main_skips_coin_present_but_missing_usd_key(capsys):
+    holdings = {"bitcoin": {"total": 1, "cost": 200}}
+    payload = {"bitcoin": {"usd_24h_change": 1.5}}  # 'usd' key absent
+    with patch("CryptoPriceTracker.fetch_prices", return_value=payload):
+        cpt.main(holdings=holdings)
+    captured = capsys.readouterr()
+    assert "bitcoin" not in captured.out
+    assert "bitcoin" in captured.err
+
+
+def test_main_skips_coin_with_null_usd_price(capsys):
+    holdings = {"bitcoin": {"total": 1, "cost": 200}}
+    payload = {"bitcoin": {"usd": None, "usd_24h_change": 1.5}}  # 'usd' is None
+    with patch("CryptoPriceTracker.fetch_prices", return_value=payload):
+        cpt.main(holdings=holdings)
+    captured = capsys.readouterr()
+    assert "bitcoin" not in captured.out
+    assert "bitcoin" in captured.err
