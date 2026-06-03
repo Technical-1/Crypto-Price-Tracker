@@ -38,3 +38,25 @@ def test_load_config_nonpositive_staked_qty_raises(tmp_path):
     path.write_text(json.dumps({"ethereum": {"staked_qty": 0}}))
     with pytest.raises(ValueError, match="staked_qty"):
         staking.load_config(str(path))
+
+
+def test_load_rewards_valid(tmp_path):
+    path = tmp_path / "rewards.csv"
+    path.write_text("date,coin,quantity\n2024-01-15,ethereum,0.01\n2024-02-15,ethereum,0.02\n")
+    rewards = staking.load_rewards(str(path))
+    assert rewards == [
+        {"date": "2024-01-15", "coin": "ethereum", "quantity": 0.01},
+        {"date": "2024-02-15", "coin": "ethereum", "quantity": 0.02},
+    ]
+
+
+def test_load_rewards_skips_invalid_rows(tmp_path, capsys):
+    path = tmp_path / "rewards.csv"
+    path.write_text("date,coin,quantity\n2024-01-15,ethereum,0.01\n2024-02-15,ethereum,notanumber\n")
+    rewards = staking.load_rewards(str(path))
+    assert rewards == [{"date": "2024-01-15", "coin": "ethereum", "quantity": 0.01}]
+    assert "skipped" in capsys.readouterr().err
+
+
+def test_load_rewards_missing_file_returns_empty(tmp_path):
+    assert staking.load_rewards(str(tmp_path / "none.csv")) == []
