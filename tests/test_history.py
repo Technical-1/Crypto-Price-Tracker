@@ -50,3 +50,30 @@ def test_reconstruct_series_skips_coin_without_price_that_day():
 
 def test_reconstruct_series_empty_dates_is_empty():
     assert history.reconstruct_series([], {}, []) == []
+
+
+def test_make_snapshot_from_holdings_and_prices():
+    held = {"bitcoin": {"total": 1.0, "cost": 100.0}, "ethereum": {"total": 10.0, "cost": 50.0}}
+    prices = {"bitcoin": {"usd": 200.0}, "ethereum": {"usd": 10.0}}
+    snap = history.make_snapshot(held, prices, "2024-06-03")
+    assert snap == {"date": "2024-06-03", "total_value": 300.0, "cost": 150.0, "pl": 150.0}
+
+
+def test_make_snapshot_skips_coin_without_price():
+    held = {"bitcoin": {"total": 1.0, "cost": 100.0}, "ethereum": {"total": 10.0, "cost": 50.0}}
+    prices = {"bitcoin": {"usd": 200.0}}   # ethereum missing
+    snap = history.make_snapshot(held, prices, "2024-06-03")
+    assert snap == {"date": "2024-06-03", "total_value": 200.0, "cost": 100.0, "pl": 100.0}
+
+
+def test_append_and_load_snapshots_roundtrip(tmp_path):
+    path = tmp_path / "snapshots.jsonl"
+    s1 = {"date": "2024-06-01", "total_value": 100.0, "cost": 80.0, "pl": 20.0}
+    s2 = {"date": "2024-06-02", "total_value": 110.0, "cost": 80.0, "pl": 30.0}
+    history.append_snapshot(str(path), s1)
+    history.append_snapshot(str(path), s2)
+    assert history.load_snapshots(str(path)) == [s1, s2]
+
+
+def test_load_snapshots_missing_file_is_empty(tmp_path):
+    assert history.load_snapshots(str(tmp_path / "none.jsonl")) == []
