@@ -72,7 +72,7 @@ def main(holdings=None, url=API_URL):
         # A coin may report a price but omit 24h change; show the row anyway,
         # treating the missing change as 0.0% rather than skipping it.
         change = coin.get('usd_24h_change', 0.0)
-        print("%20s     %8.2f     %4d      %5.2f" % (
+        print("%20s     %8.2f     %8.2f      %5.2f" % (
             key, profit, value['cost'], change))
 
 

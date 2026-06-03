@@ -96,3 +96,14 @@ def test_main_skips_coin_with_null_usd_price(capsys):
     captured = capsys.readouterr()
     assert "bitcoin" not in captured.out
     assert "bitcoin" in captured.err
+
+
+def test_main_handles_fractional_cost(capsys):
+    holdings = {"bitcoin": {"total": 1, "cost": 19.99}}
+    payload = {"bitcoin": {"usd": 50000, "usd_24h_change": 1.5}}
+    with patch("CryptoPriceTracker.fetch_prices", return_value=payload):
+        cpt.main(holdings=holdings)
+    captured = capsys.readouterr()
+    assert "bitcoin" in captured.out      # row printed, no crash
+    assert "19.99" in captured.out        # fractional cost rendered
+    assert "bitcoin" not in captured.err  # not skipped
