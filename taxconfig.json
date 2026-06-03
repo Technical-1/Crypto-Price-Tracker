@@ -1,0 +1,10 @@
+{
+  "jurisdiction": "US",
+  "long_term_threshold_days": 365,
+  "short_term_rate": 0.35,
+  "long_term_brackets": [
+    {"up_to": 47025, "rate": 0.0},
+    {"up_to": 518900, "rate": 0.15},
+    {"up_to": null, "rate": 0.20}
+  ]
+}
