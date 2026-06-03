@@ -212,3 +212,54 @@ def test_run_staking_no_apy_prints_skipped_notice(tmp_path, capsys):
     # stderr must contain a skip/no-APY notice for the coin.
     assert "solana" in captured.err
     assert "skipped" in captured.err or "no APY" in captured.err
+
+
+# --- Task 5: news subcommand ---
+
+def test_parser_news_defaults():
+    parser = cpt.build_parser()
+    args = parser.parse_args(["news"])
+    assert args.command == "news"
+    assert args.coin is None
+    assert args.limit == 5
+
+
+def test_parser_news_options():
+    parser = cpt.build_parser()
+    args = parser.parse_args(["news", "--coin", "bitcoin", "--limit", "3"])
+    assert args.coin == "bitcoin"
+    assert args.limit == 3
+
+
+def test_run_news_prints_section_for_coin(tmp_path, capsys):
+    items = [
+        {"title": "Bitcoin surges to record", "link": "https://x.test/a",
+         "published": "2024-10-02", "source": "S"},
+        {"title": "Ethereum news", "link": "https://x.test/b",
+         "published": "2024-10-02", "source": "S"},
+    ]
+    with patch("CryptoPriceTracker.news_source.fetch_rss", return_value=items):
+        cpt.run_news(coin="bitcoin", limit=5, config_path=str(tmp_path / "none.json"))
+    out = capsys.readouterr().out
+    assert "bitcoin" in out
+    assert "Bitcoin surges to record" in out
+    assert "Ethereum news" not in out          # filtered out for bitcoin
+
+
+def test_run_news_skips_failing_feed(tmp_path, capsys):
+    import requests
+    with patch("CryptoPriceTracker.news_source.fetch_rss",
+               side_effect=requests.ConnectionError("down")):
+        cpt.run_news(coin="bitcoin", limit=5, config_path=str(tmp_path / "none.json"))
+    err = capsys.readouterr().err
+    assert "skip" in err.lower() or "fail" in err.lower() or "unavailable" in err.lower()
+
+
+def test_run_news_no_coins_exits(tmp_path):
+    import pytest
+    # empty holdings (empty ledger) and no --coin -> exit 1
+    with patch("CryptoPriceTracker.holdings_mod.load_holdings_or_default", return_value={}):
+        with pytest.raises(SystemExit) as exc:
+            cpt.run_news(coin=None, limit=5, config_path=str(tmp_path / "none.json"),
+                         ledger_path=str(tmp_path / "none.json"))
+    assert exc.value.code == 1

@@ -16,12 +16,16 @@ import rebalance_report
 import staking as staking_mod
 import staking_api
 import staking_report
+import news_source
+import news as news_mod
+import news_report
 
 LEDGER_PATH = "ledger.json"
 TAXCONFIG_PATH = "taxconfig.json"
 TARGETS_PATH = "targets.json"
 STAKING_PATH = "staking.json"
 REWARDS_PATH = "rewards.csv"
+NEWS_PATH = "news.json"
 
 API_URL = (
     "https://api.coingecko.com/api/v3/simple/price?"
@@ -319,6 +323,43 @@ def run_staking(ledger_path=LEDGER_PATH, staking_path=STAKING_PATH,
     print(staking_report.format_combined_pl(portfolio_profit, rewards_value, combined))
 
 
+def run_news(coin=None, limit=5, config_path=NEWS_PATH, ledger_path=LEDGER_PATH):
+    """Print recent news + sentiment for each tracked coin (or one --coin)."""
+    config = news_mod.load_news_config(config_path)
+
+    if coin:
+        coins = [coin]
+    else:
+        held = holdings_mod.load_holdings_or_default(ledger_path, originalHoldings)
+        coins = list(held)
+    if not coins:
+        print("No coins to show news for. Add holdings or pass --coin.", file=sys.stderr)
+        sys.exit(1)
+
+    # Pool items from all sources once.
+    pooled = []
+    token = config.get("cryptopanic_token")
+    if token:
+        try:
+            pooled.extend(news_source.fetch_cryptopanic(token, [c.upper() for c in coins]))
+        except requests.RequestException as err:
+            print(f"  (CryptoPanic unavailable, using RSS: {err})", file=sys.stderr)
+    for feed in config["feeds"]:
+        try:
+            pooled.extend(news_source.fetch_rss(feed))
+        except (requests.RequestException, ValueError) as err:
+            # ValueError covers a rejected DOCTYPE or malformed XML; skip the feed.
+            print(f"  (skipped feed {feed}: {err})", file=sys.stderr)
+
+    for c in coins:
+        keywords = news_mod.keywords_for(c, config)
+        matched = news_mod.filter_items(pooled, keywords)
+        matched.sort(key=lambda it: it["published"], reverse=True)
+        summary = news_mod.sentiment_summary(matched)
+        print(news_report.format_coin_news(c, matched, summary, limit=limit))
+        print()
+
+
 def build_parser():
     parser = argparse.ArgumentParser(description="Crypto price tracker & tax tool")
     sub = parser.add_subparsers(dest="command")
@@ -338,6 +379,10 @@ def build_parser():
 
     stk = sub.add_parser("staking", help="staking APY, projected yield, rewards, and combined P/L")
     stk.add_argument("--days", type=int, default=365)
+
+    nws = sub.add_parser("news", help="recent news and naive sentiment per coin")
+    nws.add_argument("--coin", default=None)
+    nws.add_argument("--limit", type=int, default=5)
 
     return parser
 
@@ -360,6 +405,8 @@ def cli(argv=None):
         run_rebalance(strategy=args.strategy, days=args.days)
     elif args.command == "staking":
         run_staking(days=args.days)
+    elif args.command == "news":
+        run_news(coin=args.coin, limit=args.limit)
     else:
         main()
 
