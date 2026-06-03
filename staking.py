@@ -44,3 +44,37 @@ def load_rewards(path):
                 continue
             rewards.append({"date": (row.get("date") or "").strip(), "coin": coin, "quantity": qty})
     return rewards
+
+
+def effective_apys(config, api_apys):
+    """Return {coin: (apy, source)}. Prefer the API APY (matched by the coin's
+    configured symbol), else the manual 'apy' in config; omit coins with neither."""
+    result = {}
+    for coin, entry in config.items():
+        symbol = entry.get("symbol")
+        if symbol is not None and symbol in api_apys:
+            result[coin] = (api_apys[symbol], "api")
+        elif entry.get("apy") is not None:
+            result[coin] = (entry["apy"], "manual")
+    return result
+
+
+def projected_yield(staked_qty, apy, days=365):
+    """Return (period_crypto, monthly_crypto) where period_crypto is the yield
+    over `days` (annual scaled by days/365) and monthly is annual/12."""
+    annual = staked_qty * apy
+    period = annual * days / 365
+    return period, annual / 12
+
+
+def rewards_summary(rewards):
+    """Sum realized reward quantities per coin: {coin: total_qty}."""
+    summary = {}
+    for r in rewards:
+        summary[r["coin"]] = summary.get(r["coin"], 0.0) + r["quantity"]
+    return summary
+
+
+def combined_pl(portfolio_profit, rewards_value):
+    """Combined profit = portfolio unrealized profit + realized-reward value."""
+    return portfolio_profit + rewards_value
