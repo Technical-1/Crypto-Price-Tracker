@@ -1,4 +1,5 @@
-from dataclasses import dataclass
+import json
+from dataclasses import dataclass, asdict
 from datetime import datetime
 
 VALID_ACTIONS = {"buy", "sell"}
@@ -53,3 +54,19 @@ def validate_row(row):
         raise ValueError(f"fee_usd must be >= 0, got {fee_usd}")
 
     return Transaction(row["date"], coin, action, quantity, price_usd, fee_usd)
+
+
+def load_ledger(path):
+    """Return a list[Transaction] from the JSON ledger, or [] if it does not exist."""
+    try:
+        with open(path) as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        return []
+    return [Transaction(**row) for row in data]
+
+
+def save_ledger(path, txns):
+    """Write the transactions to the JSON ledger (overwrites)."""
+    with open(path, "w") as f:
+        json.dump([asdict(t) for t in txns], f, indent=2)
