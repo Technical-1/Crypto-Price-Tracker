@@ -93,3 +93,16 @@ def test_lifo_consumes_newest_lot_first():
     assert disposals[0].cost_basis == 200.0     # newest lot consumed
     assert disposals[0].realized_gain == 100.0
     assert remaining["bitcoin"][0].basis_per_unit == 100.0  # oldest lot remains
+
+
+def test_average_uses_pooled_basis():
+    txns = [
+        Transaction("2024-01-01", "bitcoin", "buy", 1.0, 100.0, 0.0),
+        Transaction("2024-03-01", "bitcoin", "buy", 3.0, 300.0, 0.0),  # 300 for 3 -> 100/unit
+        Transaction("2024-04-01", "bitcoin", "sell", 2.0, 250.0, 0.0),
+    ]
+    # pooled basis = (100 + 900)/4 = 250 total / ... per-unit = (100*1 + 100*3)/4 = 100
+    disposals, _ = costbasis.process_ledger(txns, method="average", long_term_threshold=365)
+    assert sum(d.cost_basis for d in disposals) == 200.0   # 2 units * 100 avg
+    assert sum(d.proceeds for d in disposals) == 500.0     # 2 * 250
+    assert sum(d.realized_gain for d in disposals) == 300.0
