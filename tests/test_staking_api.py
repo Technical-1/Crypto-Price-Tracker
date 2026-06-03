@@ -39,3 +39,23 @@ def test_fetch_apys_propagates_http_error():
     with patch("staking_api.requests.get", return_value=fake):
         with pytest.raises(requests.HTTPError):
             staking_api.fetch_apys(["ETH"])
+
+
+def test_fetch_apys_skips_none_apy_pool():
+    # Two ETH pools: the higher-TVL one has apy=None and must be skipped;
+    # the lower-TVL one has apy=4.0 and should be chosen instead.
+    payload = {"data": [
+        {"symbol": "ETH", "apy": None, "tvlUsd": 9000.0},  # skipped — apy is None
+        {"symbol": "ETH", "apy": 4.0,  "tvlUsd": 100.0},  # chosen — only valid pool
+    ]}
+    with patch("staking_api.requests.get", return_value=_resp(payload)):
+        apys = staking_api.fetch_apys(["ETH"], timeout=10)
+    assert apys["ETH"] == 0.04
+
+
+def test_fetch_apys_missing_data_key_returns_empty():
+    # Payload with no "data" key — fetch_apys should return {} without crashing.
+    payload = {}
+    with patch("staking_api.requests.get", return_value=_resp(payload)):
+        apys = staking_api.fetch_apys(["ETH"], timeout=10)
+    assert apys == {}
