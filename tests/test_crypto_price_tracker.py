@@ -62,6 +62,7 @@ def test_main_skips_missing_coin_and_prints_present_one(capsys):
     with patch("CryptoPriceTracker.fetch_prices", return_value=payload):
         cpt.main(holdings=holdings)
     captured = capsys.readouterr()
+    assert "Coin" in captured.out             # table header still printed
     assert "bitcoin" in captured.out          # present coin -> stdout table
     assert "mirror-protocol" not in captured.out  # missing coin not in table
     assert "mirror-protocol" in captured.err  # skip notice on stderr
