@@ -406,7 +406,7 @@ def run_history(ledger_path=LEDGER_PATH, snapshots_path=SNAPSHOTS_PATH,
     # Append today's snapshot (best-effort on live prices).
     try:
         prices = fetch_prices(API_URL)
-        snap = history_mod.make_snapshot(held_now, prices, dates[-1])
+        snap = history_mod.make_snapshot(held_now, prices, _datetime.now().strftime("%Y-%m-%d"))
         history_mod.append_snapshot(snapshots_path, snap)
     except requests.RequestException as err:
         print(f"  (snapshot skipped, live prices unavailable: {err})", file=sys.stderr)
@@ -426,7 +426,7 @@ def run_history(ledger_path=LEDGER_PATH, snapshots_path=SNAPSHOTS_PATH,
             for it in news_mod.filter_items(pooled, news_mod.keywords_for(coin, config)):
                 if it["published"] in window:
                     news_dates.add(it["published"])
-    except Exception as err:  # news is best-effort; never fatal
+    except (requests.RequestException, ValueError, KeyError, OSError) as err:
         print(f"  (news markers unavailable: {err})", file=sys.stderr)
 
     print(history_report.format_chart(series))
