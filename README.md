@@ -8,3 +8,23 @@ I wanted to have a way of visualizing all of the cryptos I owned and the individ
 This script uses coingecko's api to get all of the current values for each of the cryptos I hold.
 The total and cost values in the "originalHoldings" dictionary must be changed for any individuals specific holdings as I removed my personal numbers.
 More cryptos can be added by adding more ids to the coingecko link and to the dictionary mentioned above. 
+
+## Setup & Run
+
+This script requires Python 3 and the `requests` library.
+
+```bash
+python3 -m pip install -r requirements.txt
+python3 CryptoPriceTracker.py
+```
+
+Edit the `total` and `cost` values in the `originalHoldings` dictionary in
+`CryptoPriceTracker.py` to match your own holdings. Coins that CoinGecko no
+longer returns are skipped with a notice on stderr rather than crashing.
+
+### Development
+
+```bash
+python3 -m pip install -r requirements-dev.txt
+python3 -m pytest
+```
