@@ -99,7 +99,8 @@ def run_tax(ledger_path=LEDGER_PATH, taxconfig_path=TAXCONFIG_PATH,
     disposals, _ = costbasis.process_ledger(
         txns, method=method, long_term_threshold=config["long_term_threshold_days"])
 
-    print(report.format_realized(disposals))
+    realized_for_report = disposals if year is None else [d for d in disposals if d.sell_date[:4] == str(year)]
+    print(report.format_realized(realized_for_report))
     print()
 
     held = holdings_mod.derive_holdings(txns, method=method)
@@ -134,7 +135,11 @@ def build_parser():
 def cli(argv=None):
     args = build_parser().parse_args(argv)
     if args.command == "import":
-        added, skipped = ledger_mod.import_csv(args.csv_file, LEDGER_PATH)
+        try:
+            added, skipped = ledger_mod.import_csv(args.csv_file, LEDGER_PATH)
+        except FileNotFoundError:
+            print(f"CSV file not found: {args.csv_file}", file=sys.stderr)
+            sys.exit(1)
         print(f"Imported {added} transaction(s), skipped {skipped}.")
     elif args.command == "add":
         txn = ledger_mod.add_interactive(LEDGER_PATH)
