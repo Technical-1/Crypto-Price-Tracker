@@ -33,3 +33,46 @@ def test_main_exits_1_on_network_error(capsys):
     assert exc.value.code == 1
     err = capsys.readouterr().err
     assert "Failed to fetch prices" in err
+
+
+def test_compute_profit_single_coin():
+    # avg cost = 200/1 = 200; price 300 -> profit 100
+    assert cpt.compute_profit({"total": 1, "cost": 200}, 300) == 100
+
+
+def test_compute_profit_multiple_coins():
+    # avg cost = 200/2 = 100; price 150 -> per-coin 50 * 2 = 100
+    assert cpt.compute_profit({"total": 2, "cost": 200}, 150) == 100
+
+
+def test_compute_profit_zero_total_returns_none():
+    assert cpt.compute_profit({"total": 0, "cost": 20}, 50) is None
+
+
+def test_compute_profit_negative_total_returns_none():
+    assert cpt.compute_profit({"total": -1, "cost": 20}, 50) is None
+
+
+def test_main_skips_missing_coin_and_prints_present_one(capsys):
+    holdings = {
+        "bitcoin": {"total": 1, "cost": 200},
+        "mirror-protocol": {"total": 1, "cost": 20},  # absent from payload
+    }
+    payload = {"bitcoin": {"usd": 50000, "usd_24h_change": 1.5}}
+    with patch("CryptoPriceTracker.fetch_prices", return_value=payload):
+        cpt.main(holdings=holdings)
+    captured = capsys.readouterr()
+    assert "Coin" in captured.out             # table header still printed
+    assert "bitcoin" in captured.out          # present coin -> stdout table
+    assert "mirror-protocol" not in captured.out  # missing coin not in table
+    assert "mirror-protocol" in captured.err  # skip notice on stderr
+
+
+def test_main_skips_zero_total_holding(capsys):
+    holdings = {"bitcoin": {"total": 0, "cost": 200}}
+    payload = {"bitcoin": {"usd": 50000, "usd_24h_change": 1.5}}
+    with patch("CryptoPriceTracker.fetch_prices", return_value=payload):
+        cpt.main(holdings=holdings)
+    captured = capsys.readouterr()
+    assert "bitcoin" not in captured.out      # not in the table
+    assert "bitcoin" in captured.err          # skip notice on stderr

@@ -35,6 +35,16 @@ def fetch_prices(url, timeout=10):
     return response.json()
 
 
+def compute_profit(holding, price):
+    """Return total profit for a holding at the given USD price, or None when
+    the holding total is non-positive (avoids divide-by-zero on user input)."""
+    total = holding['total']
+    if total <= 0:
+        return None
+    avgCost = holding['cost'] / total
+    return (price - avgCost) * total
+
+
 def main(holdings=None, url=API_URL):
     if holdings is None:
         holdings = originalHoldings
@@ -49,12 +59,21 @@ def main(holdings=None, url=API_URL):
     print("---------------------   ----------   ------   ---------")
 
     for key, value in holdings.items():
-        avgCost = value['cost'] / value['total']
-        profitPerCoin = priceData[key]['usd'] - avgCost
-        profit = profitPerCoin * value['total']
+        coin = priceData.get(key)
+        if coin is None or 'usd' not in coin:
+            print(f"  (skipped {key}: no price data returned)", file=sys.stderr)
+            continue
 
+        profit = compute_profit(value, coin['usd'])
+        if profit is None:
+            print(f"  (skipped {key}: invalid holding total <= 0)", file=sys.stderr)
+            continue
+
+        # A coin may report a price but omit 24h change; show the row anyway,
+        # treating the missing change as 0.0% rather than skipping it.
+        change = coin.get('usd_24h_change', 0.0)
         print("%20s     %8.2f     %4d      %5.2f" % (
-            key, profit, value['cost'], priceData[key]['usd_24h_change']))
+            key, profit, value['cost'], change))
 
 
 if __name__ == "__main__":
