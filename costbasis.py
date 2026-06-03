@@ -31,7 +31,12 @@ def _days(acquired, sold):
 
 def process_ledger(txns, method="fifo", long_term_threshold=365):
     """Replay transactions chronologically, producing realized Disposals and the
-    Lots still held per coin. method ∈ {fifo, lifo, average}."""
+    Lots still held per coin. method in {fifo, lifo, average}.
+    Precondition: txns are already validated (e.g. via ledger.load_ledger), so
+    dates are ISO and quantities/prices are numeric."""
+    if method not in {"fifo", "lifo", "average"}:
+        raise ValueError(f"unknown cost-basis method {method!r}")
+
     lots = {}      # coin -> list[Lot]
     disposals = []
     ordered = sorted(txns, key=lambda t: t.date)
@@ -44,19 +49,26 @@ def process_ledger(txns, method="fifo", long_term_threshold=365):
             continue
 
         # sell
-        remaining_to_sell = t.quantity
         held = sum(l.quantity for l in bucket)
-        if t.quantity > held + 1e-12:
+        sell_qty = t.quantity
+        if sell_qty > held + 1e-12:
             print(f"  (warning {t.coin} {t.date}: sell of {t.quantity} exceeds "
                   f"held {held}; selling only {held})", file=sys.stderr)
-            remaining_to_sell = held
+            sell_qty = held
 
+        # Average cost: snapshot the pooled per-unit basis once, over the
+        # pre-sell pool, so every slice of this sell uses the same average.
+        pooled_avg = None
+        if method == "average" and held > 0:
+            pooled_avg = sum(l.quantity * l.basis_per_unit for l in bucket) / held
+
+        remaining_to_sell = sell_qty
         while remaining_to_sell > 1e-12 and bucket:
-            lot = bucket[0] if method != "lifo" else bucket[-1]
+            lot = bucket[-1] if method == "lifo" else bucket[0]
             take = min(lot.quantity, remaining_to_sell)
-            fee_share = t.fee_usd * (take / t.quantity)
+            fee_share = t.fee_usd * (take / sell_qty) if sell_qty else 0.0
             proceeds = take * t.price_usd - fee_share
-            basis_per_unit = _basis_for(method, lot, bucket)
+            basis_per_unit = pooled_avg if method == "average" else lot.basis_per_unit
             cost_basis = take * basis_per_unit
             holding_days = _days(lot.date, t.date)
             disposals.append(Disposal(
@@ -69,14 +81,10 @@ def process_ledger(txns, method="fifo", long_term_threshold=365):
             lot.quantity -= take
             remaining_to_sell -= take
             if lot.quantity <= 1e-12:
-                bucket.remove(lot)
+                if method == "lifo":
+                    bucket.pop()
+                else:
+                    bucket.pop(0)
 
-    return disposals, {c: ls for c, ls in lots.items()}
-
-
-def _basis_for(method, lot, bucket):
-    if method == "average":
-        total_qty = sum(l.quantity for l in bucket)
-        total_basis = sum(l.quantity * l.basis_per_unit for l in bucket)
-        return total_basis / total_qty if total_qty else lot.basis_per_unit
-    return lot.basis_per_unit
+    return disposals, {c: [Lot(l.date, l.quantity, l.basis_per_unit) for l in ls]
+                       for c, ls in lots.items()}
