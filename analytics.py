@@ -21,3 +21,34 @@ def volatility(returns):
 def annualize(daily_vol):
     """Scale a daily volatility to annual (sqrt of 365 trading days)."""
     return daily_vol * math.sqrt(365)
+
+
+def correlation(returns_a, returns_b):
+    """Pearson correlation over the overlapping prefix of two return series.
+    A constant (zero-variance) series yields 0.0 (correlation undefined)."""
+    n = min(len(returns_a), len(returns_b))
+    if n < 2:
+        return 0.0
+    a = returns_a[:n]
+    b = returns_b[:n]
+    mean_a = sum(a) / n
+    mean_b = sum(b) / n
+    cov = sum((a[i] - mean_a) * (b[i] - mean_b) for i in range(n))
+    var_a = sum((x - mean_a) ** 2 for x in a)
+    var_b = sum((x - mean_b) ** 2 for x in b)
+    if var_a == 0 or var_b == 0:
+        return 0.0
+    return cov / math.sqrt(var_a * var_b)
+
+
+def correlation_matrix(returns_by_coin):
+    """All-pairs Pearson correlation. Diagonal is 1.0. Returns {(a, b): corr}."""
+    coins = list(returns_by_coin)
+    matrix = {}
+    for a in coins:
+        for b in coins:
+            if a == b:
+                matrix[(a, b)] = 1.0
+            else:
+                matrix[(a, b)] = correlation(returns_by_coin[a], returns_by_coin[b])
+    return matrix
