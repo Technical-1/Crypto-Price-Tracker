@@ -61,3 +61,47 @@ def test_parser_tax_method_and_year():
     assert args.command == "tax"
     assert args.method == "lifo"
     assert args.year == 2024
+
+
+def test_parser_rebalance_options():
+    parser = cpt.build_parser()
+    args = parser.parse_args(["rebalance", "--strategy", "marketcap", "--days", "30"])
+    assert args.command == "rebalance"
+    assert args.strategy == "marketcap"
+    assert args.days == 30
+
+
+def test_parser_rebalance_defaults():
+    parser = cpt.build_parser()
+    args = parser.parse_args(["rebalance"])
+    assert args.strategy == "equal"
+    assert args.days == 90
+
+
+def test_run_rebalance_prints_all_sections(tmp_path, capsys):
+    import ledger
+    ledger_path = tmp_path / "ledger.json"
+    ledger.save_ledger(str(ledger_path), [
+        ledger.Transaction("2024-01-01", "bitcoin", "buy", 1.0, 100.0, 0.0),
+        ledger.Transaction("2024-01-01", "ethereum", "buy", 10.0, 10.0, 0.0),
+    ])
+    prices = {"bitcoin": {"usd": 200.0}, "ethereum": {"usd": 20.0}}
+    history = {
+        "bitcoin": [("2024-01-01", 100.0), ("2024-02-01", 150.0), ("2024-03-01", 200.0)],
+        "ethereum": [("2024-01-01", 10.0), ("2024-02-01", 15.0), ("2024-03-01", 20.0)],
+    }
+    with patch("CryptoPriceTracker.fetch_prices", return_value=prices), \
+         patch("CryptoPriceTracker.marketdata.fetch_history", side_effect=lambda c, days=90: history[c]):
+        cpt.run_rebalance(ledger_path=str(ledger_path), strategy="equal", days=90)
+    out = capsys.readouterr().out
+    assert "Current allocation" in out
+    assert "Risk (volatility)" in out
+    assert "Correlation matrix" in out
+    assert "Rebalancing trades" in out
+    assert "Backtest" in out
+
+
+def test_run_rebalance_empty_ledger_exits(tmp_path):
+    with pytest.raises(SystemExit) as exc:
+        cpt.run_rebalance(ledger_path=str(tmp_path / "none.json"), strategy="equal", days=90)
+    assert exc.value.code == 1

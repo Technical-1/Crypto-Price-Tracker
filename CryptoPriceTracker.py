@@ -8,9 +8,15 @@ import holdings as holdings_mod
 import costbasis
 import tax as tax_mod
 import report
+import marketdata
+import analytics
+import rebalance as rebalance_mod
+import backtest
+import rebalance_report
 
 LEDGER_PATH = "ledger.json"
 TAXCONFIG_PATH = "taxconfig.json"
+TARGETS_PATH = "targets.json"
 
 API_URL = (
     "https://api.coingecko.com/api/v3/simple/price?"
@@ -116,6 +122,99 @@ def run_tax(ledger_path=LEDGER_PATH, taxconfig_path=TAXCONFIG_PATH,
     print(report.format_tax(short_gain, long_gain, short_tax, long_tax, config))
 
 
+def run_rebalance(ledger_path=LEDGER_PATH, targets_path=TARGETS_PATH,
+                  strategy="equal", days=90):
+    """Print allocation, risk, target trades, and a backtest for the portfolio."""
+    held = holdings_mod.load_holdings_or_default(ledger_path, {})
+    if not held:
+        print("No holdings found. Use 'import FILE.csv' or 'add' first.",
+              file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        prices = fetch_prices(API_URL)
+    except requests.RequestException as err:
+        print(f"Failed to fetch prices: {err}", file=sys.stderr)
+        sys.exit(1)
+
+    coins = [c for c in held if (prices.get(c) or {}).get("usd") is not None]
+    current_values = {c: held[c]["total"] * prices[c]["usd"] for c in coins}
+    print(rebalance_report.format_allocation(current_values))
+    print()
+
+    # Historical risk: fetch per-coin history, skip coins that fail/are too short.
+    history = {}
+    for coin in coins:
+        try:
+            series = marketdata.fetch_history(coin, days=days)
+        except requests.RequestException as err:
+            print(f"  (skipped {coin} history: {err})", file=sys.stderr)
+            continue
+        if len(series) >= 2:
+            history[coin] = series
+        else:
+            print(f"  (skipped {coin}: insufficient history)", file=sys.stderr)
+
+    returns_by_coin = {c: analytics.daily_returns([p for _, p in s])
+                       for c, s in history.items()}
+    vols_daily = {c: analytics.volatility(r) for c, r in returns_by_coin.items()}
+    vols_annual = {c: analytics.annualize(v) for c, v in vols_daily.items()}
+
+    risk_coins = list(history)
+    if len(risk_coins) >= 2:
+        corr = analytics.correlation_matrix(returns_by_coin)
+        # Weight by value among the coins that actually have history, so the
+        # portfolio-volatility weights sum to 1 even if some coins were skipped.
+        risk_total = sum(current_values.get(c, 0.0) for c in risk_coins)
+        risk_weights = {c: current_values.get(c, 0.0) / risk_total for c in risk_coins} \
+            if risk_total else {}
+        port_vol = analytics.portfolio_volatility(risk_weights, vols_daily, corr)
+        print(rebalance_report.format_risk(vols_daily, vols_annual, port_vol))
+        print()
+        print(rebalance_report.format_correlation(risk_coins, corr))
+        print()
+    elif vols_daily:
+        print(rebalance_report.format_risk(vols_daily, vols_annual, 0.0))
+        print("  (correlation/portfolio volatility skipped: need >= 2 coins with history)")
+        print()
+    else:
+        print("(risk analytics skipped: no usable history)", file=sys.stderr)
+
+    # Target weights + trades.
+    market_caps = None
+    custom = None
+    if strategy == "marketcap":
+        try:
+            market_caps = marketdata.fetch_market_caps(coins)
+        except requests.RequestException as err:
+            print(f"Failed to fetch market caps: {err}", file=sys.stderr)
+            sys.exit(1)
+    if strategy == "custom":
+        try:
+            custom = rebalance_mod.load_targets(targets_path)
+        except ValueError as err:
+            print(f"Custom targets error: {err}", file=sys.stderr)
+            sys.exit(1)
+    try:
+        weights = rebalance_mod.target_weights(strategy, coins,
+                                               market_caps=market_caps, custom=custom)
+    except ValueError as err:
+        print(f"Rebalance error: {err}", file=sys.stderr)
+        sys.exit(1)
+
+    trades = rebalance_mod.compute_trades(current_values, weights, prices)
+    print(rebalance_report.format_trades(trades))
+    print()
+
+    # Backtest current vs target weights over the fetched window.
+    total_value = sum(current_values.values())
+    cur_weights = {c: current_values[c] / total_value for c in current_values} \
+        if total_value else {}
+    current_return = backtest.buy_and_hold_return(history, cur_weights)
+    target_return = backtest.buy_and_hold_return(history, weights)
+    print(rebalance_report.format_backtest(days, current_return, target_return, strategy))
+
+
 def build_parser():
     parser = argparse.ArgumentParser(description="Crypto price tracker & tax tool")
     sub = parser.add_subparsers(dest="command")
@@ -128,6 +227,10 @@ def build_parser():
     tax_cmd = sub.add_parser("tax", help="show realized gains, unrealized P/L, and estimated tax")
     tax_cmd.add_argument("--method", choices=["fifo", "lifo", "average"], default="fifo")
     tax_cmd.add_argument("--year", type=int, default=None)
+
+    reb = sub.add_parser("rebalance", help="allocation, risk, target trades, and backtest")
+    reb.add_argument("--strategy", choices=["equal", "marketcap", "custom"], default="equal")
+    reb.add_argument("--days", type=int, default=90)
 
     return parser
 
@@ -146,6 +249,8 @@ def cli(argv=None):
         print(f"Added: {txn}")
     elif args.command == "tax":
         run_tax(method=args.method, year=args.year)
+    elif args.command == "rebalance":
+        run_rebalance(strategy=args.strategy, days=args.days)
     else:
         main()
 
