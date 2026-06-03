@@ -28,6 +28,14 @@ def test_load_config_malformed_uses_defaults(tmp_path, capsys):
     assert "default tax config" in capsys.readouterr().err
 
 
+def test_load_config_missing_required_key_uses_defaults(tmp_path, capsys):
+    path = tmp_path / "incomplete.json"
+    path.write_text(json.dumps({"jurisdiction": "US", "long_term_threshold_days": 365}))
+    cfg = tax.load_tax_config(str(path))
+    assert cfg == tax.DEFAULT_CONFIG
+    assert "default tax config" in capsys.readouterr().err
+
+
 from costbasis import Disposal
 
 

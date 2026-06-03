@@ -1,4 +1,5 @@
 # tax.py
+import copy
 import json
 import sys
 
@@ -24,7 +25,7 @@ def load_tax_config(path):
         return cfg
     except (FileNotFoundError, json.JSONDecodeError, KeyError) as err:
         print(f"Warning: using default tax config ({err})", file=sys.stderr)
-        return dict(DEFAULT_CONFIG)
+        return copy.deepcopy(DEFAULT_CONFIG)
 
 
 def summarize(disposals, year=None):
