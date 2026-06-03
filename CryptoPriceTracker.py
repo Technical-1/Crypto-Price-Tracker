@@ -13,10 +13,15 @@ import analytics
 import rebalance as rebalance_mod
 import backtest
 import rebalance_report
+import staking as staking_mod
+import staking_api
+import staking_report
 
 LEDGER_PATH = "ledger.json"
 TAXCONFIG_PATH = "taxconfig.json"
 TARGETS_PATH = "targets.json"
+STAKING_PATH = "staking.json"
+REWARDS_PATH = "rewards.csv"
 
 API_URL = (
     "https://api.coingecko.com/api/v3/simple/price?"
@@ -219,6 +224,93 @@ def run_rebalance(ledger_path=LEDGER_PATH, targets_path=TARGETS_PATH,
     print(rebalance_report.format_backtest(days, current_return, target_return, strategy))
 
 
+def run_staking(ledger_path=LEDGER_PATH, staking_path=STAKING_PATH,
+                rewards_path=REWARDS_PATH, days=365):
+    """Print staking APY/yield, realized rewards, staked-vs-not, and combined P/L."""
+    try:
+        config = staking_mod.load_config(staking_path)
+    except ValueError as err:
+        print(f"Staking config error: {err}", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        prices = fetch_prices(API_URL)
+    except requests.RequestException as err:
+        print(f"Failed to fetch prices: {err}", file=sys.stderr)
+        sys.exit(1)
+
+    symbols = [e["symbol"] for e in config.values() if e.get("symbol")]
+    api_apys = {}
+    if symbols:
+        try:
+            api_apys = staking_api.fetch_apys(symbols)
+        except requests.RequestException as err:
+            print(f"  (staking APY API unavailable, falling back to manual: {err})",
+                  file=sys.stderr)
+
+    eff = staking_mod.effective_apys(config, api_apys)
+
+    def usd(coin):
+        return (prices.get(coin) or {}).get("usd")
+
+    # Yield table.
+    yield_rows = []
+    for coin, (apy, source) in eff.items():
+        staked = config[coin]["staked_qty"]
+        period_crypto, monthly_crypto = staking_mod.projected_yield(staked, apy, days=days)
+        price = usd(coin)
+        if price is None:
+            print(f"  (no live price for {coin}; USD yield omitted)", file=sys.stderr)
+            period_usd = monthly_usd = 0.0
+        else:
+            period_usd = period_crypto * price
+            monthly_usd = monthly_crypto * price
+        yield_rows.append({"coin": coin, "apy": apy, "source": source,
+                           "staked_qty": staked, "period_crypto": period_crypto,
+                           "monthly_crypto": monthly_crypto, "period_usd": period_usd,
+                           "monthly_usd": monthly_usd})
+    print(staking_report.format_yield(yield_rows, days=days))
+    print()
+
+    # Realized rewards.
+    rewards = staking_mod.load_rewards(rewards_path)
+    summary = staking_mod.rewards_summary(rewards)
+    reward_rows = []
+    rewards_value = 0.0
+    for coin, qty in summary.items():
+        price = usd(coin) or 0.0
+        value = qty * price
+        rewards_value += value
+        reward_rows.append({"coin": coin, "quantity": qty, "usd_value": value})
+    print(staking_report.format_rewards(reward_rows, rewards_value))
+    print()
+
+    # Staked vs not staked: annual extra income (days=365 horizon).
+    comparison_rows = []
+    total_extra = 0.0
+    for row in yield_rows:
+        annual_crypto = row["staked_qty"] * row["apy"]
+        price = usd(row["coin"]) or 0.0
+        extra = annual_crypto * price
+        total_extra += extra
+        comparison_rows.append({"coin": row["coin"], "extra_annual_usd": extra})
+    print(staking_report.format_comparison(comparison_rows, total_extra))
+    print()
+
+    # Combined P/L: portfolio unrealized profit + realized-reward value.
+    held = holdings_mod.load_holdings_or_default(ledger_path, {})
+    portfolio_profit = 0.0
+    for coin, h in held.items():
+        price = usd(coin)
+        if price is None:
+            continue
+        profit = compute_profit(h, price)
+        if profit is not None:
+            portfolio_profit += profit
+    combined = staking_mod.combined_pl(portfolio_profit, rewards_value)
+    print(staking_report.format_combined_pl(portfolio_profit, rewards_value, combined))
+
+
 def build_parser():
     parser = argparse.ArgumentParser(description="Crypto price tracker & tax tool")
     sub = parser.add_subparsers(dest="command")
@@ -235,6 +327,9 @@ def build_parser():
     reb = sub.add_parser("rebalance", help="allocation, risk, target trades, and backtest")
     reb.add_argument("--strategy", choices=["equal", "marketcap", "custom"], default="equal")
     reb.add_argument("--days", type=int, default=90)
+
+    stk = sub.add_parser("staking", help="staking APY, projected yield, rewards, and combined P/L")
+    stk.add_argument("--days", type=int, default=365)
 
     return parser
 
@@ -255,6 +350,8 @@ def cli(argv=None):
         run_tax(method=args.method, year=args.year)
     elif args.command == "rebalance":
         run_rebalance(strategy=args.strategy, days=args.days)
+    elif args.command == "staking":
+        run_staking(days=args.days)
     else:
         main()
 

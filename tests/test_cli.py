@@ -105,3 +105,67 @@ def test_run_rebalance_empty_ledger_exits(tmp_path):
     with pytest.raises(SystemExit) as exc:
         cpt.run_rebalance(ledger_path=str(tmp_path / "none.json"), strategy="equal", days=90)
     assert exc.value.code == 1
+
+
+def test_parser_staking_defaults():
+    parser = cpt.build_parser()
+    args = parser.parse_args(["staking"])
+    assert args.command == "staking"
+    assert args.days == 365
+
+
+def test_parser_staking_days():
+    parser = cpt.build_parser()
+    args = parser.parse_args(["staking", "--days", "30"])
+    assert args.days == 30
+
+
+def test_run_staking_prints_all_sections(tmp_path, capsys):
+    import json
+    import ledger
+    ledger_path = tmp_path / "ledger.json"
+    ledger.save_ledger(str(ledger_path), [
+        ledger.Transaction("2024-01-01", "ethereum", "buy", 2.0, 100.0, 0.0),
+    ])
+    staking_path = tmp_path / "staking.json"
+    staking_path.write_text(json.dumps({"ethereum": {"staked_qty": 2.0, "symbol": "ETH", "apy": 0.04}}))
+    rewards_path = tmp_path / "rewards.csv"
+    rewards_path.write_text("date,coin,quantity\n2024-02-01,ethereum,0.05\n")
+    prices = {"ethereum": {"usd": 200.0}}
+    with patch("CryptoPriceTracker.fetch_prices", return_value=prices), \
+         patch("CryptoPriceTracker.staking_api.fetch_apys", return_value={"ETH": 0.06}):
+        cpt.run_staking(ledger_path=str(ledger_path), staking_path=str(staking_path),
+                        rewards_path=str(rewards_path), days=365)
+    out = capsys.readouterr().out
+    assert "Staking yield" in out
+    assert "Realized staking rewards" in out
+    assert "Staked vs not staked" in out
+    assert "Combined profit/loss" in out
+
+
+def test_run_staking_falls_back_to_manual_on_api_error(tmp_path, capsys):
+    import json
+    import requests
+    import ledger
+    ledger.save_ledger(str(tmp_path / "ledger.json"), [
+        ledger.Transaction("2024-01-01", "ethereum", "buy", 2.0, 100.0, 0.0)])
+    staking_path = tmp_path / "staking.json"
+    staking_path.write_text(json.dumps({"ethereum": {"staked_qty": 2.0, "symbol": "ETH", "apy": 0.04}}))
+    prices = {"ethereum": {"usd": 200.0}}
+    with patch("CryptoPriceTracker.fetch_prices", return_value=prices), \
+         patch("CryptoPriceTracker.staking_api.fetch_apys",
+               side_effect=requests.ConnectionError("down")):
+        cpt.run_staking(ledger_path=str(tmp_path / "ledger.json"),
+                        staking_path=str(staking_path),
+                        rewards_path=str(tmp_path / "none.csv"), days=365)
+    captured = capsys.readouterr()
+    assert "4.0" in captured.out          # manual 0.04 APY used
+    assert "APY" in captured.err or "manual" in captured.err.lower() or "falling back" in captured.err.lower()
+
+
+def test_run_staking_missing_config_exits(tmp_path):
+    with pytest.raises(SystemExit) as exc:
+        cpt.run_staking(ledger_path=str(tmp_path / "ledger.json"),
+                        staking_path=str(tmp_path / "none.json"),
+                        rewards_path=str(tmp_path / "none.csv"), days=365)
+    assert exc.value.code == 1
