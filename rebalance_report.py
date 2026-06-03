@@ -14,15 +14,20 @@ def format_allocation(current_values):
     return "\n".join(lines)
 
 
-def format_risk(vols_daily, vols_annual, portfolio_vol):
-    """Per-coin daily/annualized volatility plus the portfolio volatility."""
+def format_risk(vols_daily, vols_annual, portfolio_vol=None):
+    """Per-coin daily/annualized volatility plus the portfolio volatility.
+
+    When portfolio_vol is None (fewer than two coins have history), the
+    portfolio volatility line is omitted entirely.
+    """
     lines = ["Risk (volatility):",
              "      Coin         Daily %    Annual %",
              "  ------------   --------   ---------"]
     for coin in sorted(vols_daily):
         lines.append("  %-12s   %7.2f   %8.2f" % (
             coin, vols_daily[coin] * 100, vols_annual.get(coin, 0.0) * 100))
-    lines.append("  Portfolio daily volatility: %.2f%%" % (portfolio_vol * 100))
+    if portfolio_vol is not None:
+        lines.append("  Portfolio daily volatility: %.2f%%" % (portfolio_vol * 100))
     return "\n".join(lines)
 
 

@@ -36,6 +36,14 @@ def test_format_trades_shows_actions():
     assert "bitcoin" in out and "ethereum" in out
 
 
+def test_format_risk_omits_portfolio_line_when_none():
+    vols_daily = {"bitcoin": 0.05}
+    vols_annual = {"bitcoin": 0.05 * 19.1}
+    out = rebalance_report.format_risk(vols_daily, vols_annual)
+    assert "bitcoin" in out
+    assert "Portfolio" not in out
+
+
 def test_format_backtest_shows_both_returns():
     out = rebalance_report.format_backtest(90, 0.12, 0.18, "equal")
     assert "90" in out

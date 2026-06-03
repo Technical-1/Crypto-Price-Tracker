@@ -174,7 +174,7 @@ def run_rebalance(ledger_path=LEDGER_PATH, targets_path=TARGETS_PATH,
         print(rebalance_report.format_correlation(risk_coins, corr))
         print()
     elif vols_daily:
-        print(rebalance_report.format_risk(vols_daily, vols_annual, 0.0))
+        print(rebalance_report.format_risk(vols_daily, vols_annual))
         print("  (correlation/portfolio volatility skipped: need >= 2 coins with history)")
         print()
     else:
