@@ -60,7 +60,7 @@ def main(holdings=None, url=API_URL):
 
     for key, value in holdings.items():
         coin = priceData.get(key)
-        if coin is None or 'usd' not in coin:
+        if coin is None or coin.get('usd') is None:
             print(f"  (skipped {key}: no price data returned)", file=sys.stderr)
             continue
 
