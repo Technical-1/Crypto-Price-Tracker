@@ -99,3 +99,21 @@ def import_csv(csv_path, ledger_path):
             added += 1
     save_ledger(ledger_path, existing)
     return added, skipped
+
+
+def add_interactive(ledger_path, input_fn=input):
+    """Prompt for one transaction's fields, validate, append it, and return it.
+    input_fn is injectable for testing."""
+    row = {
+        "date": input_fn("date (YYYY-MM-DD): "),
+        "coin": input_fn("coin id (e.g. bitcoin): "),
+        "action": input_fn("action (buy/sell): "),
+        "quantity": input_fn("quantity: "),
+        "price_usd": input_fn("price per unit (USD): "),
+        "fee_usd": input_fn("fee (USD): "),
+    }
+    txn = validate_row(row)
+    txns = load_ledger(ledger_path)
+    txns.append(txn)
+    save_ledger(ledger_path, txns)
+    return txn

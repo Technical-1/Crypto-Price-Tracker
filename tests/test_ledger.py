@@ -64,3 +64,11 @@ def test_import_csv_appends_valid_skips_invalid_and_dupes(tmp_path, capsys):
     loaded = ledger.load_ledger(str(ledger_path))
     assert loaded == [ledger.Transaction("2024-01-15", "bitcoin", "buy", 0.5, 40000.0, 10.0)]
     assert "ethereum" in capsys.readouterr().err  # skip notice on stderr
+
+
+def test_add_interactive_appends_one(tmp_path):
+    ledger_path = tmp_path / "ledger.json"
+    answers = iter(["2024-03-01", "ethereum", "buy", "2", "1500", "3"])
+    txn = ledger.add_interactive(str(ledger_path), input_fn=lambda _prompt: next(answers))
+    assert txn == ledger.Transaction("2024-03-01", "ethereum", "buy", 2.0, 1500.0, 3.0)
+    assert ledger.load_ledger(str(ledger_path)) == [txn]
