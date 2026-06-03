@@ -52,3 +52,15 @@ def correlation_matrix(returns_by_coin):
             else:
                 matrix[(a, b)] = correlation(returns_by_coin[a], returns_by_coin[b])
     return matrix
+
+
+def portfolio_volatility(weights, vols, corr):
+    """sqrt(sum_i sum_j w_i w_j sigma_i sigma_j rho_ij) over the coins in weights.
+    Missing correlation pairs default to 0.0 (treated as uncorrelated)."""
+    coins = list(weights)
+    total = 0.0
+    for a in coins:
+        for b in coins:
+            rho = corr.get((a, b), 1.0 if a == b else 0.0)
+            total += weights[a] * weights[b] * vols.get(a, 0.0) * vols.get(b, 0.0) * rho
+    return math.sqrt(total) if total > 0 else 0.0

@@ -57,3 +57,23 @@ def test_correlation_matrix_diagonal_is_one():
     assert m[("ethereum", "ethereum")] == 1.0
     assert math.isclose(m[("bitcoin", "ethereum")], 1.0, rel_tol=1e-9)
     assert math.isclose(m[("ethereum", "bitcoin")], 1.0, rel_tol=1e-9)
+
+
+def test_portfolio_volatility_two_assets():
+    # weights 0.5/0.5; vols 0.2/0.4; correlation 0.0
+    # var = .5^2*.2^2 + .5^2*.4^2 + 2*.5*.5*.2*.4*0 = .01 + .04 = .05
+    # vol = sqrt(.05)
+    weights = {"a": 0.5, "b": 0.5}
+    vols = {"a": 0.2, "b": 0.4}
+    corr = {("a", "a"): 1.0, ("b", "b"): 1.0, ("a", "b"): 0.0, ("b", "a"): 0.0}
+    result = analytics.portfolio_volatility(weights, vols, corr)
+    assert math.isclose(result, math.sqrt(0.05), rel_tol=1e-9)
+
+
+def test_portfolio_volatility_perfectly_correlated_is_weighted_sum():
+    # corr 1.0 everywhere -> portfolio vol = w_a*vol_a + w_b*vol_b
+    weights = {"a": 0.5, "b": 0.5}
+    vols = {"a": 0.2, "b": 0.4}
+    corr = {("a", "a"): 1.0, ("b", "b"): 1.0, ("a", "b"): 1.0, ("b", "a"): 1.0}
+    result = analytics.portfolio_volatility(weights, vols, corr)
+    assert math.isclose(result, 0.3, rel_tol=1e-9)
