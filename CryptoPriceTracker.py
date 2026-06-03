@@ -351,6 +351,10 @@ def run_news(coin=None, limit=5, config_path=NEWS_PATH, ledger_path=LEDGER_PATH)
             # ValueError covers a rejected DOCTYPE or malformed XML; skip the feed.
             print(f"  (skipped feed {feed}: {err})", file=sys.stderr)
 
+    if not pooled:
+        print("No news could be fetched from any source.", file=sys.stderr)
+        sys.exit(1)
+
     for c in coins:
         keywords = news_mod.keywords_for(c, config)
         matched = news_mod.filter_items(pooled, keywords)

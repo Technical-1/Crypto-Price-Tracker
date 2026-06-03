@@ -247,12 +247,52 @@ def test_run_news_prints_section_for_coin(tmp_path, capsys):
 
 
 def test_run_news_skips_failing_feed(tmp_path, capsys):
+    import json
     import requests
-    with patch("CryptoPriceTracker.news_source.fetch_rss",
-               side_effect=requests.ConnectionError("down")):
-        cpt.run_news(coin="bitcoin", limit=5, config_path=str(tmp_path / "none.json"))
+
+    # Two feeds: one good, one bad.
+    news_cfg = {
+        "feeds": ["https://good.test/rss", "https://bad.test/rss"],
+        "keywords": {"bitcoin": ["bitcoin"]},
+    }
+    cfg_path = tmp_path / "news.json"
+    cfg_path.write_text(json.dumps(news_cfg))
+
+    good_items = [
+        {"title": "Bitcoin surges", "link": "https://x/a",
+         "published": "2024-10-02", "source": "S"},
+    ]
+
+    def _fetch(url, timeout=10):
+        if "bad" in url:
+            raise requests.ConnectionError("down")
+        return good_items
+
+    with patch("CryptoPriceTracker.news_source.fetch_rss", side_effect=_fetch):
+        cpt.run_news(coin="bitcoin", limit=5, config_path=str(cfg_path))
+
+    captured = capsys.readouterr()
+    # The bad feed should be mentioned in stderr with a skip notice.
+    assert "bad.test" in captured.err or "skipped" in captured.err.lower()
+    # The good feed's item must appear in stdout.
+    assert "Bitcoin surges" in captured.out
+
+
+def test_run_news_all_sources_fail_exits(tmp_path, capsys):
+    import pytest
+    import requests
+
+    def _always_fail(url, timeout=10):
+        raise requests.ConnectionError("down")
+
+    with patch("CryptoPriceTracker.news_source.fetch_rss", side_effect=_always_fail):
+        with pytest.raises(SystemExit) as exc:
+            cpt.run_news(coin="bitcoin", limit=5,
+                         config_path=str(tmp_path / "none.json"))
+
+    assert exc.value.code == 1
     err = capsys.readouterr().err
-    assert "skip" in err.lower() or "fail" in err.lower() or "unavailable" in err.lower()
+    assert "no news" in err.lower() or "could not" in err.lower() or "no news could be fetched" in err.lower()
 
 
 def test_run_news_no_coins_exits(tmp_path):
