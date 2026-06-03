@@ -81,3 +81,15 @@ def test_oversell_is_skipped_with_notice(capsys):
     assert sum(d.quantity for d in disposals) == 1.0
     assert "bitcoin" in capsys.readouterr().err
     assert remaining.get("bitcoin", []) == []
+
+
+def test_lifo_consumes_newest_lot_first():
+    txns = [
+        Transaction("2024-01-01", "bitcoin", "buy", 1.0, 100.0, 0.0),
+        Transaction("2024-03-01", "bitcoin", "buy", 1.0, 200.0, 0.0),
+        Transaction("2024-04-01", "bitcoin", "sell", 1.0, 300.0, 0.0),
+    ]
+    disposals, remaining = costbasis.process_ledger(txns, method="lifo", long_term_threshold=365)
+    assert disposals[0].cost_basis == 200.0     # newest lot consumed
+    assert disposals[0].realized_gain == 100.0
+    assert remaining["bitcoin"][0].basis_per_unit == 100.0  # oldest lot remains
