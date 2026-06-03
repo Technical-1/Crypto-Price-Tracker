@@ -1,0 +1,4 @@
+date,coin,action,quantity,price_usd,fee_usd
+2024-01-15,bitcoin,buy,0.5,40000,10
+2024-02-10,ethereum,buy,3,2500,5
+2024-06-01,bitcoin,sell,0.2,60000,8
