@@ -1,4 +1,6 @@
+import csv
 import json
+import sys
 from dataclasses import dataclass, asdict
 from datetime import datetime
 
@@ -6,7 +8,7 @@ VALID_ACTIONS = {"buy", "sell"}
 FIELDS = ("date", "coin", "action", "quantity", "price_usd", "fee_usd")
 
 
-@dataclass
+@dataclass(frozen=True)
 class Transaction:
     date: str        # ISO YYYY-MM-DD
     coin: str
@@ -70,3 +72,30 @@ def save_ledger(path, txns):
     """Write the transactions to the JSON ledger (overwrites)."""
     with open(path, "w") as f:
         json.dump([asdict(t) for t in txns], f, indent=2)
+
+
+def import_csv(csv_path, ledger_path):
+    """Append valid rows from a CSV into the JSON ledger. Returns (added, skipped).
+    Invalid rows are reported on stderr and skipped; exact duplicates of rows
+    already in the ledger (or earlier in this file) are skipped."""
+    existing = load_ledger(ledger_path)
+    seen = set(existing)  # Transaction is a frozen-comparable dataclass
+    added, skipped = 0, 0
+    with open(csv_path, newline="") as f:
+        for lineno, row in enumerate(csv.DictReader(f), start=2):
+            try:
+                txn = validate_row(row)
+            except ValueError as err:
+                coin_hint = row.get("coin", "")
+                print(f"  (skipped CSV line {lineno} [{coin_hint}]: {err})", file=sys.stderr)
+                skipped += 1
+                continue
+            if txn in seen:
+                print(f"  (skipped CSV line {lineno}: duplicate of existing entry)", file=sys.stderr)
+                skipped += 1
+                continue
+            existing.append(txn)
+            seen.add(txn)
+            added += 1
+    save_ledger(ledger_path, existing)
+    return added, skipped

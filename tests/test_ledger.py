@@ -47,3 +47,20 @@ def test_save_then_load_roundtrips(tmp_path):
 
 def test_load_missing_file_returns_empty(tmp_path):
     assert ledger.load_ledger(str(tmp_path / "nope.json")) == []
+
+
+def test_import_csv_appends_valid_skips_invalid_and_dupes(tmp_path, capsys):
+    csv_path = tmp_path / "txns.csv"
+    csv_path.write_text(
+        "date,coin,action,quantity,price_usd,fee_usd\n"
+        "2024-01-15,bitcoin,buy,0.5,40000,10\n"        # valid
+        "2024-02-01,ethereum,trade,1,2000,1\n"          # invalid action -> skipped
+        "2024-01-15,bitcoin,buy,0.5,40000,10\n"         # exact dupe of row 1 -> one kept
+    )
+    ledger_path = tmp_path / "ledger.json"
+    added, skipped = ledger.import_csv(str(csv_path), str(ledger_path))
+    assert added == 1
+    assert skipped == 2
+    loaded = ledger.load_ledger(str(ledger_path))
+    assert loaded == [ledger.Transaction("2024-01-15", "bitcoin", "buy", 0.5, 40000.0, 10.0)]
+    assert "ethereum" in capsys.readouterr().err  # skip notice on stderr
