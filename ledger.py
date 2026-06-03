@@ -5,7 +5,6 @@ from dataclasses import dataclass, asdict
 from datetime import datetime
 
 VALID_ACTIONS = {"buy", "sell"}
-FIELDS = ("date", "coin", "action", "quantity", "price_usd", "fee_usd")
 
 
 @dataclass(frozen=True)
@@ -49,7 +48,7 @@ def validate_row(row):
         raise ValueError(f"price_usd must be >= 0, got {price_usd}")
 
     try:
-        fee_usd = float(row.get("fee_usd", 0) or 0)
+        fee_usd = float(row.get("fee_usd", 0) or 0)  # missing key or empty string both default to 0
     except (ValueError, TypeError):
         raise ValueError(f"fee_usd must be a number, got {row.get('fee_usd')!r}")
     if fee_usd < 0:
@@ -65,7 +64,13 @@ def load_ledger(path):
             data = json.load(f)
     except FileNotFoundError:
         return []
-    return [Transaction(**row) for row in data]
+    txns = []
+    for row in data:
+        try:
+            txns.append(validate_row(row))
+        except ValueError as err:
+            print(f"  (skipped ledger entry: {err})", file=sys.stderr)
+    return txns
 
 
 def save_ledger(path, txns):
@@ -97,6 +102,8 @@ def import_csv(csv_path, ledger_path):
             existing.append(txn)
             seen.add(txn)
             added += 1
+    if added == 0:
+        return added, skipped
     save_ledger(ledger_path, existing)
     return added, skipped
 

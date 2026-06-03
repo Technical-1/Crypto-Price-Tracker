@@ -63,7 +63,26 @@ def test_import_csv_appends_valid_skips_invalid_and_dupes(tmp_path, capsys):
     assert skipped == 2
     loaded = ledger.load_ledger(str(ledger_path))
     assert loaded == [ledger.Transaction("2024-01-15", "bitcoin", "buy", 0.5, 40000.0, 10.0)]
-    assert "ethereum" in capsys.readouterr().err  # skip notice on stderr
+    err = capsys.readouterr().err
+    assert "ethereum" in err   # invalid-row notice
+    assert "duplicate" in err  # duplicate-skip notice
+
+
+def test_validate_row_rejects_missing_required_key():
+    with pytest.raises(ValueError, match="price_usd"):
+        ledger.validate_row({
+            "date": "2024-01-15", "coin": "bitcoin", "action": "buy",
+            "quantity": "1",
+            # price_usd key intentionally omitted
+        })
+
+
+def test_validate_row_rejects_negative_fee():
+    with pytest.raises(ValueError, match="fee_usd"):
+        ledger.validate_row({
+            "date": "2024-01-15", "coin": "bitcoin", "action": "buy",
+            "quantity": "1", "price_usd": "100", "fee_usd": "-5",
+        })
 
 
 def test_add_interactive_appends_one(tmp_path):
