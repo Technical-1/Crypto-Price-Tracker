@@ -341,7 +341,9 @@ def run_news(coin=None, limit=5, config_path=NEWS_PATH, ledger_path=LEDGER_PATH)
     token = config.get("cryptopanic_token")
     if token:
         try:
-            pooled.extend(news_source.fetch_cryptopanic(token, [c.upper() for c in coins]))
+            currencies = sorted({kw.upper() for c in coins
+                                  for kw in news_mod.keywords_for(c, config)})
+            pooled.extend(news_source.fetch_cryptopanic(token, currencies))
         except requests.RequestException as err:
             print(f"  (CryptoPanic unavailable, using RSS: {err})", file=sys.stderr)
     for feed in config["feeds"]:

@@ -303,3 +303,35 @@ def test_run_news_no_coins_exits(tmp_path):
             cpt.run_news(coin=None, limit=5, config_path=str(tmp_path / "none.json"),
                          ledger_path=str(tmp_path / "none.json"))
     assert exc.value.code == 1
+
+
+def test_run_news_cryptopanic_currencies_from_keywords(tmp_path, capsys):
+    """fetch_cryptopanic is called with uppercased keyword-derived currencies (e.g.
+    'BTC', 'BITCOIN'), NOT the raw CoinGecko id ('BITCOIN' only via c.upper())."""
+    import json
+    from unittest.mock import Mock
+
+    news_cfg = {
+        "feeds": [],
+        "cryptopanic_token": "tok",
+        "keywords": {"bitcoin": ["bitcoin", "btc"]},
+    }
+    news_json = tmp_path / "news.json"
+    news_json.write_text(json.dumps(news_cfg))
+
+    cp_item = {
+        "title": "Bitcoin hits new high",
+        "link": "https://cryptopanic.test/1",
+        "published": "2024-10-02",
+        "source": "CryptoPanic",
+    }
+    mock_fetch_cp = Mock(return_value=[cp_item])
+
+    with patch("CryptoPriceTracker.news_source.fetch_cryptopanic", mock_fetch_cp), \
+         patch("CryptoPriceTracker.news_source.fetch_rss", return_value=[]):
+        cpt.run_news(coin="bitcoin", limit=5, config_path=str(news_json))
+
+    mock_fetch_cp.assert_called_once()
+    called_currencies = mock_fetch_cp.call_args[0][1]
+    assert "BTC" in called_currencies
+    assert "BITCOIN" in called_currencies
