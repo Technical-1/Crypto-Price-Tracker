@@ -283,7 +283,10 @@ def run_staking(ledger_path=LEDGER_PATH, staking_path=STAKING_PATH,
     reward_rows = []
     rewards_value = 0.0
     for coin, qty in summary.items():
-        price = usd(coin) or 0.0
+        price = usd(coin)
+        if price is None:
+            print(f"  (no live price for {coin}; reward value omitted)", file=sys.stderr)
+            price = 0.0
         value = qty * price
         rewards_value += value
         reward_rows.append({"coin": coin, "quantity": qty, "usd_value": value})

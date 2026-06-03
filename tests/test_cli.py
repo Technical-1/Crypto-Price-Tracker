@@ -171,6 +171,28 @@ def test_run_staking_missing_config_exits(tmp_path):
     assert exc.value.code == 1
 
 
+def test_run_staking_no_price_reward_prints_stderr_notice(tmp_path, capsys):
+    """A reward coin absent from the price feed emits a stderr notice and values at 0."""
+    import json
+    import ledger
+    ledger_path = tmp_path / "ledger.json"
+    ledger.save_ledger(str(ledger_path), [])
+    staking_path = tmp_path / "staking.json"
+    staking_path.write_text(json.dumps({"ethereum": {"staked_qty": 1.0, "symbol": "ETH", "apy": 0.04}}))
+    rewards_path = tmp_path / "rewards.csv"
+    # "solana" appears in rewards but is absent from the mocked price feed
+    rewards_path.write_text("date,coin,quantity\n2024-03-01,solana,2.5\n")
+    # prices do NOT include "solana"
+    prices = {"ethereum": {"usd": 200.0}}
+    with patch("CryptoPriceTracker.fetch_prices", return_value=prices), \
+         patch("CryptoPriceTracker.staking_api.fetch_apys", return_value={"ETH": 0.04}):
+        cpt.run_staking(ledger_path=str(ledger_path), staking_path=str(staking_path),
+                        rewards_path=str(rewards_path), days=365)
+    captured = capsys.readouterr()
+    assert "solana" in captured.err
+    assert "no live price" in captured.err or "reward value omitted" in captured.err
+
+
 def test_run_staking_no_apy_prints_skipped_notice(tmp_path, capsys):
     """A coin with no API match and no manual APY produces a stderr skip notice
     and is absent from the yield table."""
