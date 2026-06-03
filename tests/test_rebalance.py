@@ -63,3 +63,38 @@ def test_load_targets_malformed_json_raises(tmp_path):
     path.write_text("{not json")
     with pytest.raises(ValueError):
         rebalance.load_targets(str(path))
+
+
+def test_compute_trades_rebalances_to_target():
+    # total 1000; current 700/300; target 50/50 -> sell 200 of a, buy 200 of b
+    current_values = {"a": 700.0, "b": 300.0}
+    weights = {"a": 0.5, "b": 0.5}
+    prices = {"a": {"usd": 10.0}, "b": {"usd": 5.0}}
+    trades = {t["coin"]: t for t in rebalance.compute_trades(current_values, weights, prices)}
+    assert math.isclose(trades["a"]["delta_usd"], -200.0, rel_tol=1e-9)
+    assert trades["a"]["action"] == "sell"
+    assert math.isclose(trades["a"]["coin_amount"], -20.0, rel_tol=1e-9)  # -200 / 10
+    assert math.isclose(trades["b"]["delta_usd"], 200.0, rel_tol=1e-9)
+    assert trades["b"]["action"] == "buy"
+    assert math.isclose(trades["b"]["coin_amount"], 40.0, rel_tol=1e-9)   # 200 / 5
+
+
+def test_compute_trades_full_sell_when_target_absent():
+    # 'b' has no target -> weight 0 -> sell all of b
+    current_values = {"a": 500.0, "b": 500.0}
+    weights = {"a": 1.0}
+    prices = {"a": {"usd": 10.0}, "b": {"usd": 5.0}}
+    trades = {t["coin"]: t for t in rebalance.compute_trades(current_values, weights, prices)}
+    assert trades["b"]["action"] == "sell"
+    assert math.isclose(trades["b"]["delta_usd"], -500.0, rel_tol=1e-9)
+
+
+def test_compute_trades_buy_from_zero():
+    # 'b' held nothing but target wants 50% -> buy
+    current_values = {"a": 1000.0}
+    weights = {"a": 0.5, "b": 0.5}
+    prices = {"a": {"usd": 10.0}, "b": {"usd": 5.0}}
+    trades = {t["coin"]: t for t in rebalance.compute_trades(current_values, weights, prices)}
+    assert trades["b"]["action"] == "buy"
+    assert math.isclose(trades["b"]["delta_usd"], 500.0, rel_tol=1e-9)
+    assert math.isclose(trades["b"]["coin_amount"], 100.0, rel_tol=1e-9)
