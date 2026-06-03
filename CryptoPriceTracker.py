@@ -19,6 +19,9 @@ import staking_report
 import news_source
 import news as news_mod
 import news_report
+import history as history_mod
+import history_report
+from datetime import datetime as _datetime
 
 LEDGER_PATH = "ledger.json"
 TAXCONFIG_PATH = "taxconfig.json"
@@ -26,6 +29,7 @@ TARGETS_PATH = "targets.json"
 STAKING_PATH = "staking.json"
 REWARDS_PATH = "rewards.csv"
 NEWS_PATH = "news.json"
+SNAPSHOTS_PATH = "snapshots.jsonl"
 
 API_URL = (
     "https://api.coingecko.com/api/v3/simple/price?"
@@ -366,6 +370,93 @@ def run_news(coin=None, limit=5, config_path=NEWS_PATH, ledger_path=LEDGER_PATH)
         print()
 
 
+def _d(date_str):
+    return _datetime.strptime(date_str, "%Y-%m-%d")
+
+
+def run_history(ledger_path=LEDGER_PATH, snapshots_path=SNAPSHOTS_PATH,
+                news_config_path=NEWS_PATH, days=90, date=None, play=False):
+    """Reconstruct and render the portfolio value/PL history."""
+    txns = ledger_mod.load_ledger(ledger_path)
+    held_now = holdings_mod.load_holdings_or_default(ledger_path, {})
+    if not held_now or not txns:
+        print("No holdings found. Use 'import FILE.csv' or 'add' first.", file=sys.stderr)
+        sys.exit(1)
+
+    coins = sorted({t.coin for t in txns})
+    price_by_coin_date = {}
+    all_dates = set()
+    for coin in coins:
+        try:
+            series = marketdata.fetch_history(coin, days=days)
+        except requests.RequestException as err:
+            print(f"  (skipped {coin} history: {err})", file=sys.stderr)
+            continue
+        by_date = {d: p for d, p in series}
+        price_by_coin_date[coin] = by_date
+        all_dates.update(by_date)
+
+    if not all_dates:
+        print("No historical price data available.", file=sys.stderr)
+        sys.exit(1)
+
+    dates = sorted(all_dates)
+    series = history_mod.reconstruct_series(txns, price_by_coin_date, dates)
+
+    # Append today's snapshot (best-effort on live prices).
+    try:
+        prices = fetch_prices(API_URL)
+        snap = history_mod.make_snapshot(held_now, prices, dates[-1])
+        history_mod.append_snapshot(snapshots_path, snap)
+    except requests.RequestException as err:
+        print(f"  (snapshot skipped, live prices unavailable: {err})", file=sys.stderr)
+        prices = {}
+
+    # Best-effort news markers for days within the window.
+    news_dates = set()
+    try:
+        config = news_mod.load_news_config(news_config_path)
+        pooled = []
+        for feed in config["feeds"]:
+            try:
+                pooled.extend(news_source.fetch_rss(feed))
+            except (requests.RequestException, ValueError):
+                continue
+        window = set(dates)
+        for coin in coins:
+            for it in news_mod.filter_items(pooled, news_mod.keywords_for(coin, config)):
+                if it["published"] in window:
+                    news_dates.add(it["published"])
+    except Exception as err:  # news is best-effort; never fatal
+        print(f"  (news markers unavailable: {err})", file=sys.stderr)
+
+    print(history_report.format_chart(series))
+    if play:
+        print()
+        print(history_report.format_playback(series, news_dates))
+    if date is not None:
+        print()
+        if date in dates:
+            chosen = date
+        else:
+            chosen = min(dates, key=lambda d: abs((_d(d) - _d(date)).days))
+            print(f"(no data for {date}; showing nearest day {chosen})", file=sys.stderr)
+        held = history_mod.holdings_as_of(txns, chosen)
+        rows = []
+        total_value = total_pl = 0.0
+        for coin, h in sorted(held.items()):
+            price = price_by_coin_date.get(coin, {}).get(chosen)
+            if price is None:
+                continue
+            value = h["total"] * price
+            pl = value - h["cost"]
+            total_value += value
+            total_pl += pl
+            rows.append({"coin": coin, "qty": h["total"], "price": price,
+                         "value": value, "pl": pl})
+        print(history_report.format_snapshot(chosen, rows, total_value, total_pl))
+
+
 def build_parser():
     parser = argparse.ArgumentParser(description="Crypto price tracker & tax tool")
     sub = parser.add_subparsers(dest="command")
@@ -390,6 +481,11 @@ def build_parser():
     nws.add_argument("--coin", default=None)
     nws.add_argument("--limit", type=int, default=5)
 
+    hist = sub.add_parser("history", help="reconstructed portfolio value/PL history and playback")
+    hist.add_argument("--days", type=int, default=90)
+    hist.add_argument("--date", default=None)
+    hist.add_argument("--play", action="store_true")
+
     return parser
 
 
@@ -413,6 +509,8 @@ def cli(argv=None):
         run_staking(days=args.days)
     elif args.command == "news":
         run_news(coin=args.coin, limit=args.limit)
+    elif args.command == "history":
+        run_history(days=args.days, date=args.date, play=args.play)
     else:
         main()
 

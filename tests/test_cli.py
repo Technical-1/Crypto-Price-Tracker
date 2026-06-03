@@ -305,6 +305,74 @@ def test_run_news_no_coins_exits(tmp_path):
     assert exc.value.code == 1
 
 
+# --- Task 6: history subcommand ---
+
+def test_parser_history_defaults():
+    parser = cpt.build_parser()
+    args = parser.parse_args(["history"])
+    assert args.command == "history"
+    assert args.days == 90
+    assert args.date is None
+    assert args.play is False
+
+
+def test_parser_history_options():
+    parser = cpt.build_parser()
+    args = parser.parse_args(["history", "--days", "30", "--date", "2024-01-02", "--play"])
+    assert args.days == 30
+    assert args.date == "2024-01-02"
+    assert args.play is True
+
+
+def _history_fixture(tmp_path):
+    import ledger
+    ledger_path = tmp_path / "ledger.json"
+    ledger.save_ledger(str(ledger_path), [
+        ledger.Transaction("2024-01-01", "bitcoin", "buy", 1.0, 100.0, 0.0),
+    ])
+    hist = {"bitcoin": [("2024-01-01", 100.0), ("2024-01-02", 150.0), ("2024-01-03", 120.0)]}
+    return str(ledger_path), hist
+
+
+def test_run_history_prints_chart(tmp_path, capsys):
+    ledger_path, hist = _history_fixture(tmp_path)
+    prices = {"bitcoin": {"usd": 120.0}}
+    snap_path = tmp_path / "snapshots.jsonl"
+    with patch("CryptoPriceTracker.fetch_prices", return_value=prices), \
+         patch("CryptoPriceTracker.marketdata.fetch_history", side_effect=lambda c, days=90: hist[c]), \
+         patch("CryptoPriceTracker.news_source.fetch_rss", return_value=[]):
+        cpt.run_history(ledger_path=ledger_path, snapshots_path=str(snap_path),
+                        days=90, date=None, play=False)
+    out = capsys.readouterr().out
+    assert "Portfolio history" in out
+    # a snapshot was appended
+    import history
+    assert len(history.load_snapshots(str(snap_path))) == 1
+
+
+def test_run_history_play_and_date(tmp_path, capsys):
+    ledger_path, hist = _history_fixture(tmp_path)
+    prices = {"bitcoin": {"usd": 120.0}}
+    with patch("CryptoPriceTracker.fetch_prices", return_value=prices), \
+         patch("CryptoPriceTracker.marketdata.fetch_history", side_effect=lambda c, days=90: hist[c]), \
+         patch("CryptoPriceTracker.news_source.fetch_rss", return_value=[]):
+        cpt.run_history(ledger_path=ledger_path, snapshots_path=str(tmp_path / "s.jsonl"),
+                        days=90, date="2024-01-02", play=True)
+    out = capsys.readouterr().out
+    assert "Playback" in out
+    assert "Snapshot 2024-01-02" in out
+
+
+def test_run_history_empty_ledger_exits(tmp_path):
+    import pytest
+    with patch("CryptoPriceTracker.holdings_mod.load_holdings_or_default", return_value={}):
+        with pytest.raises(SystemExit) as exc:
+            cpt.run_history(ledger_path=str(tmp_path / "none.json"),
+                            snapshots_path=str(tmp_path / "s.jsonl"),
+                            days=90, date=None, play=False)
+    assert exc.value.code == 1
+
+
 def test_run_news_cryptopanic_currencies_from_keywords(tmp_path, capsys):
     """fetch_cryptopanic is called with uppercased keyword-derived currencies (e.g.
     'BTC', 'BITCOIN'), NOT the raw CoinGecko id ('BITCOIN' only via c.upper())."""
