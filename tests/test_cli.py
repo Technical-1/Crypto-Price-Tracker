@@ -169,3 +169,24 @@ def test_run_staking_missing_config_exits(tmp_path):
                         staking_path=str(tmp_path / "none.json"),
                         rewards_path=str(tmp_path / "none.csv"), days=365)
     assert exc.value.code == 1
+
+
+def test_run_staking_no_apy_prints_skipped_notice(tmp_path, capsys):
+    """A coin with no API match and no manual APY produces a stderr skip notice
+    and is absent from the yield table."""
+    import json
+    staking_path = tmp_path / "staking.json"
+    # "solana" has a symbol but NO manual apy; API returns {} so no API APY either.
+    staking_path.write_text(json.dumps({"solana": {"staked_qty": 5.0, "symbol": "SOL"}}))
+    prices = {"solana": {"usd": 150.0}}
+    with patch("CryptoPriceTracker.fetch_prices", return_value=prices), \
+         patch("CryptoPriceTracker.staking_api.fetch_apys", return_value={}):
+        cpt.run_staking(ledger_path=str(tmp_path / "ledger.json"),
+                        staking_path=str(staking_path),
+                        rewards_path=str(tmp_path / "none.csv"), days=365)
+    captured = capsys.readouterr()
+    # The coin must not appear in the yield table output.
+    assert "solana" not in captured.out
+    # stderr must contain a skip/no-APY notice for the coin.
+    assert "solana" in captured.err
+    assert "skipped" in captured.err or "no APY" in captured.err

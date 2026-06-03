@@ -250,6 +250,11 @@ def run_staking(ledger_path=LEDGER_PATH, staking_path=STAKING_PATH,
 
     eff = staking_mod.effective_apys(config, api_apys)
 
+    for coin in config:
+        if coin not in eff:
+            print(f"  (skipped {coin} from yield: no APY available from API or config)",
+                  file=sys.stderr)
+
     def usd(coin):
         return (prices.get(coin) or {}).get("usd")
 
