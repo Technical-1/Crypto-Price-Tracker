@@ -82,7 +82,14 @@ A news **item** is a dict: `{"title": str, "link": str, "published": str
   parse with `xml.etree.ElementTree`: each `channel/item` yields `title`, `link`,
   and `pubDate` (parsed via `email.utils.parsedate_to_datetime` to a `YYYY-MM-DD`
   string; unparseable → `""`). `source` is the feed's `channel/title` or the URL
-  host. Raises `requests.RequestException` on network/HTTP failure.
+  host. Raises `requests.RequestException` on network/HTTP failure, or
+  `ValueError` on a rejected DOCTYPE or malformed XML.
+  - **XML security:** `xml.etree` does not resolve external entities, so XXE /
+    SSRF / external-DTD attacks are not exploitable. The residual risk is an
+    entity-expansion ("billion laughs") DoS, which requires a DTD with custom
+    entity definitions. RSS feeds never need a DOCTYPE, so `fetch_rss` refuses to
+    parse any document containing `<!DOCTYPE` (raising `ValueError`). This closes
+    the vector while keeping the project stdlib-only (no `defusedxml` dependency).
 - `fetch_cryptopanic(token, currencies, timeout=10)` → `list[item]`. GET
   `https://cryptopanic.com/api/v1/posts/?auth_token={token}&currencies={CSV}`,
   map `results[].title`/`.url`/`.published_at` (date prefix) into items. Raises
@@ -144,7 +151,8 @@ The default (no-arg) behavior and other subcommands are unchanged.
 `pytest`, no network (mock `fetch_rss` / `requests`). Coverage:
 
 - `fetch_rss`: parse a sample RSS XML string into items; RFC-822 `pubDate` →
-  `YYYY-MM-DD`; unparseable date → `""`; HTTP error propagates.
+  `YYYY-MM-DD`; unparseable date → `""`; HTTP error propagates; a document with a
+  `<!DOCTYPE>` raises `ValueError` (entity-attack guard).
 - `classify_sentiment`: bullish phrase → "bullish"; bearish → "bearish"; mixed
   tie / none → "neutral".
 - `filter_items`: whole-word match; no false substring match ("eos" not in
