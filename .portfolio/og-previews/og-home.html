@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap');
+
+    :root {
+      --bg-0: #060a10;
+      --bg-1: #0b121d;
+      --green: #34e29b;
+      --green-2: #5eead4;
+      --text: #f1f5f9;
+      --muted: #8295a8;
+    }
+
+    .og-card {
+      width: 1200px;
+      height: 630px;
+      background:
+        radial-gradient(circle at 12% 8%, rgba(52, 226, 155, 0.18), transparent 38%),
+        radial-gradient(circle at 92% 96%, rgba(94, 234, 212, 0.14), transparent 42%),
+        linear-gradient(155deg, #0c1521 0%, var(--bg-0) 100%);
+      position: relative;
+      overflow: hidden;
+      font-family: 'Sora', sans-serif;
+    }
+
+    /* faint dotted grid */
+    .og-card::before {
+      content: "";
+      position: absolute; inset: 0;
+      background-image: radial-gradient(rgba(120, 150, 170, 0.10) 1.2px, transparent 1.2px);
+      background-size: 34px 34px;
+      mask-image: radial-gradient(circle at 50% 40%, #000 55%, transparent 100%);
+      pointer-events: none;
+    }
+
+    /* big faint coin glyphs floating in the background */
+    .glyph {
+      position: absolute;
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 700;
+      color: rgba(94, 234, 212, 0.06);
+      line-height: 1;
+      pointer-events: none;
+      z-index: 0;
+    }
+    .g1 { font-size: 360px; top: -40px; right: -10px; }
+    .g2 { font-size: 200px; bottom: 40px; left: -8px; color: rgba(52, 226, 155, 0.05); }
+
+    .content {
+      position: relative;
+      z-index: 3;
+      padding: 64px 70px 0;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 19px;
+      font-weight: 700;
+      letter-spacing: 3px;
+      color: var(--green-2);
+      text-transform: uppercase;
+      padding: 10px 18px;
+      border: 1px solid rgba(94, 234, 212, 0.28);
+      border-radius: 999px;
+      background: rgba(52, 226, 155, 0.06);
+    }
+    .pulse {
+      width: 12px; height: 12px; border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 16px 3px rgba(52, 226, 155, 0.8);
+    }
+
+    h1 {
+      margin-top: 30px;
+      font-size: 112px;
+      font-weight: 800;
+      letter-spacing: -4px;
+      line-height: 0.96;
+      color: var(--text);
+    }
+    h1 .accent {
+      background: linear-gradient(100deg, var(--green) 10%, var(--green-2) 90%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .subhead {
+      margin-top: 26px;
+      font-size: 27px;
+      font-weight: 400;
+      color: var(--muted);
+      max-width: 720px;
+      line-height: 1.4;
+    }
+
+    /* featured profit stat */
+    .stat {
+      position: absolute;
+      top: 78px;
+      right: 70px;
+      z-index: 4;
+      text-align: right;
+    }
+    .stat .label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 16px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .stat .value {
+      font-size: 64px;
+      font-weight: 800;
+      letter-spacing: -2px;
+      color: var(--green);
+      line-height: 1;
+      margin-top: 8px;
+      text-shadow: 0 0 30px rgba(52, 226, 155, 0.45);
+    }
+    .stat .delta {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--green-2);
+      margin-top: 6px;
+    }
+
+    /* chart band across the bottom */
+    .chart {
+      position: absolute;
+      left: 0; right: 0; bottom: 0;
+      height: 300px;
+      z-index: 1;
+    }
+    .chart svg { width: 100%; height: 100%; display: block; }
+
+    /* footer */
+    .footer {
+      position: absolute;
+      bottom: 38px; left: 70px; right: 70px;
+      z-index: 5;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .tags { display: flex; gap: 12px; }
+    .tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 18px;
+      font-weight: 500;
+      padding: 9px 18px;
+      border-radius: 999px;
+      border: 1px solid rgba(130, 149, 168, 0.28);
+      background: rgba(10, 18, 28, 0.55);
+      color: #b6c6d4;
+      backdrop-filter: blur(4px);
+    }
+    .url {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--green);
+    }
+  </style>
+</head>
+<body>
+  <div class="og-card">
+    <div class="glyph g1">&#8383;</div>
+    <div class="glyph g2">&#926;</div>
+
+    <div class="content">
+      <div class="eyebrow"><span class="pulse"></span>Live &#8226; CoinGecko API</div>
+      <h1>Crypto Price<br><span class="accent">Tracker</span></h1>
+      <div class="subhead">Per-coin profit &amp; loss on your portfolio &mdash; live prices and 24h change, in one command.</div>
+    </div>
+
+    <div class="stat">
+      <div class="label">Portfolio Profit</div>
+      <div class="value">+$44,520</div>
+      <div class="delta">&#9650; 18.6% &middot; 24h</div>
+    </div>
+
+    <div class="chart">
+      <svg viewBox="0 0 1200 300" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="area" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#34e29b" stop-opacity="0.38"/>
+            <stop offset="100%" stop-color="#34e29b" stop-opacity="0"/>
+          </linearGradient>
+          <linearGradient id="line" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stop-color="#2dd4bf"/>
+            <stop offset="100%" stop-color="#34e29b"/>
+          </linearGradient>
+          <filter id="glow" x="-20%" y="-60%" width="140%" height="220%">
+            <feGaussianBlur stdDeviation="7" result="b"/>
+            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+
+        <!-- area fill -->
+        <path d="M0,250 L0,210 C70,205 110,180 180,190 C250,200 290,150 360,158
+                 C430,166 470,120 540,140 C610,160 650,110 720,120
+                 C790,130 830,70 900,86 C970,102 1010,52 1080,40
+                 C1130,32 1170,26 1200,20 L1200,300 L0,300 Z"
+              fill="url(#area)"/>
+
+        <!-- line -->
+        <path d="M0,210 C70,205 110,180 180,190 C250,200 290,150 360,158
+                 C430,166 470,120 540,140 C610,160 650,110 720,120
+                 C790,130 830,70 900,86 C970,102 1010,52 1080,40
+                 C1130,32 1170,26 1200,20"
+              fill="none" stroke="url(#line)" stroke-width="5"
+              stroke-linecap="round" filter="url(#glow)"/>
+
+        <!-- end point marker -->
+        <circle cx="1080" cy="40" r="9" fill="#34e29b" filter="url(#glow)"/>
+        <circle cx="1080" cy="40" r="16" fill="none" stroke="#34e29b" stroke-opacity="0.4" stroke-width="2"/>
+      </svg>
+    </div>
+
+    <div class="footer">
+      <div class="tags">
+        <span class="tag">Python 3</span>
+        <span class="tag">requests</span>
+        <span class="tag">pytest</span>
+      </div>
+      <div class="url">github.com/Technical-1</div>
+    </div>
+  </div>
+</body>
+</html>
