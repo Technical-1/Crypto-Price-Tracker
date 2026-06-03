@@ -410,7 +410,6 @@ def run_history(ledger_path=LEDGER_PATH, snapshots_path=SNAPSHOTS_PATH,
         history_mod.append_snapshot(snapshots_path, snap)
     except requests.RequestException as err:
         print(f"  (snapshot skipped, live prices unavailable: {err})", file=sys.stderr)
-        prices = {}
 
     # Best-effort news markers for days within the window.
     news_dates = set()

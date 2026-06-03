@@ -373,6 +373,46 @@ def test_run_history_empty_ledger_exits(tmp_path):
     assert exc.value.code == 1
 
 
+def test_run_history_no_history_exits(tmp_path, capsys):
+    """fetch_history raises for every coin → all_dates empty → SystemExit(1)."""
+    import ledger
+    import requests
+    ledger_path = tmp_path / "ledger.json"
+    ledger.save_ledger(str(ledger_path), [
+        ledger.Transaction("2024-01-01", "bitcoin", "buy", 1.0, 100.0, 0.0),
+    ])
+    with patch("CryptoPriceTracker.marketdata.fetch_history",
+               side_effect=requests.ConnectionError("down")):
+        with pytest.raises(SystemExit) as exc:
+            cpt.run_history(ledger_path=str(ledger_path),
+                            snapshots_path=str(tmp_path / "s.jsonl"),
+                            days=90, date=None, play=False)
+    assert exc.value.code == 1
+    err = capsys.readouterr().err
+    assert "historical" in err.lower() or "price data" in err.lower()
+
+
+def test_run_history_date_nearest_day_fallback(tmp_path, capsys):
+    """--date not in grid → nearest day fallback with a stderr notice."""
+    import ledger
+    ledger_path = tmp_path / "ledger.json"
+    ledger.save_ledger(str(ledger_path), [
+        ledger.Transaction("2024-01-01", "bitcoin", "buy", 1.0, 100.0, 0.0),
+    ])
+    hist = {"bitcoin": [("2024-01-01", 100.0), ("2024-01-02", 150.0), ("2024-01-03", 120.0)]}
+    prices = {"bitcoin": {"usd": 120.0}}
+    with patch("CryptoPriceTracker.fetch_prices", return_value=prices), \
+         patch("CryptoPriceTracker.marketdata.fetch_history",
+               side_effect=lambda c, days=90: hist[c]), \
+         patch("CryptoPriceTracker.news_source.fetch_rss", return_value=[]):
+        cpt.run_history(ledger_path=str(ledger_path),
+                        snapshots_path=str(tmp_path / "s.jsonl"),
+                        days=90, date="2024-06-15", play=False)
+    captured = capsys.readouterr()
+    assert "nearest" in captured.err.lower()
+    assert "Snapshot " in captured.out
+
+
 def test_run_news_cryptopanic_currencies_from_keywords(tmp_path, capsys):
     """fetch_cryptopanic is called with uppercased keyword-derived currencies (e.g.
     'BTC', 'BITCOIN'), NOT the raw CoinGecko id ('BITCOIN' only via c.upper())."""
