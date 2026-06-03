@@ -1,6 +1,16 @@
+import argparse
 import sys
 
 import requests
+
+import ledger as ledger_mod
+import holdings as holdings_mod
+import costbasis
+import tax as tax_mod
+import report
+
+LEDGER_PATH = "ledger.json"
+TAXCONFIG_PATH = "taxconfig.json"
 
 API_URL = (
     "https://api.coingecko.com/api/v3/simple/price?"
@@ -47,7 +57,7 @@ def compute_profit(holding, price):
 
 def main(holdings=None, url=API_URL):
     if holdings is None:
-        holdings = originalHoldings
+        holdings = holdings_mod.load_holdings_or_default(LEDGER_PATH, originalHoldings)
 
     try:
         priceData = fetch_prices(url)
@@ -76,5 +86,64 @@ def main(holdings=None, url=API_URL):
             key, profit, value['cost'], change))
 
 
+def run_tax(ledger_path=LEDGER_PATH, taxconfig_path=TAXCONFIG_PATH,
+            method="fifo", year=None):
+    """Print realized gains, unrealized P/L (live prices), and estimated tax."""
+    txns = ledger_mod.load_ledger(ledger_path)
+    if not txns:
+        print("No transactions found. Use 'import FILE.csv' or 'add' first.",
+              file=sys.stderr)
+        sys.exit(1)
+
+    config = tax_mod.load_tax_config(taxconfig_path)
+    disposals, _ = costbasis.process_ledger(
+        txns, method=method, long_term_threshold=config["long_term_threshold_days"])
+
+    print(report.format_realized(disposals))
+    print()
+
+    held = holdings_mod.derive_holdings(txns, method=method)
+    try:
+        prices = fetch_prices(API_URL)
+        print(report.format_unrealized(held, prices))
+    except requests.RequestException as err:
+        print(f"(unrealized P/L unavailable: {err})", file=sys.stderr)
+    print()
+
+    short_gain, long_gain = tax_mod.summarize(disposals, year=year)
+    short_tax, long_tax = tax_mod.estimate_tax(short_gain, long_gain, config)
+    print(report.format_tax(short_gain, long_gain, short_tax, long_tax, config))
+
+
+def build_parser():
+    parser = argparse.ArgumentParser(description="Crypto price tracker & tax tool")
+    sub = parser.add_subparsers(dest="command")
+
+    imp = sub.add_parser("import", help="import transactions from a CSV file")
+    imp.add_argument("csv_file")
+
+    sub.add_parser("add", help="interactively add one transaction")
+
+    tax_cmd = sub.add_parser("tax", help="show realized gains, unrealized P/L, and estimated tax")
+    tax_cmd.add_argument("--method", choices=["fifo", "lifo", "average"], default="fifo")
+    tax_cmd.add_argument("--year", type=int, default=None)
+
+    return parser
+
+
+def cli(argv=None):
+    args = build_parser().parse_args(argv)
+    if args.command == "import":
+        added, skipped = ledger_mod.import_csv(args.csv_file, LEDGER_PATH)
+        print(f"Imported {added} transaction(s), skipped {skipped}.")
+    elif args.command == "add":
+        txn = ledger_mod.add_interactive(LEDGER_PATH)
+        print(f"Added: {txn}")
+    elif args.command == "tax":
+        run_tax(method=args.method, year=args.year)
+    else:
+        main()
+
+
 if __name__ == "__main__":
-    main()
+    cli()
