@@ -17,3 +17,6 @@ rewards.csv
 
 # Runtime news config (copy news.sample.json to create)
 news.json
+
+# Runtime portfolio snapshots (appended by the history subcommand)
+snapshots.jsonl

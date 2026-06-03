@@ -250,6 +250,36 @@ Sentiment is classified by a naive keyword-lexicon heuristic, not machine learni
 
 RSS feeds that declare a `<!DOCTYPE ...>` are rejected before parsing. The stdlib `xml.etree` does not resolve external entities (so XXE/SSRF is not exploitable), but a DOCTYPE with custom entity definitions is the vector for billion-laughs denial-of-service. Rejecting DOCTYPE keeps the project stdlib-only (no `defusedxml` dependency) while closing that vector.
 
+## Historical Playback & Graphing
+
+```bash
+python3 CryptoPriceTracker.py history [--days 90] [--date YYYY-MM-DD] [--play]
+```
+
+The `history` subcommand reconstructs your portfolio's daily value and P/L over the chosen window and renders the result as a Unicode sparkline chart in the terminal.
+
+### How reconstruction works
+
+Rather than multiplying your *current* holdings by old prices, the command replays the ledger to determine exactly which coins you held on each historical day, then values those as-of holdings at that day's CoinGecko price. This means past P/L figures reflect what you actually owned at the time — buys made after a given day are excluded from that day's calculation.
+
+### Output modes
+
+| Flag | Behaviour |
+|---|---|
+| *(none)* | Prints two sparkline rows (Value and P/L) with a start/end/min/max/delta summary |
+| `--play` | Also steps through each day in the window, one line per day, with a horizontal P/L bar |
+| `--date YYYY-MM-DD` | Also prints a per-coin breakdown (quantity, price, value, P/L) for that specific day; if the exact date has no price data the nearest available day is used |
+
+Days within the window that have at least one matching recent news headline are marked with `*` in the playback view. This is best-effort: RSS feeds carry only current headlines, so coverage of older dates is limited.
+
+### Snapshots
+
+Each run appends a snapshot row `{"date", "total_value", "cost", "pl"}` to `snapshots.jsonl` in the working directory. The file is git-ignored and accumulates over time so you can track portfolio history across multiple sessions.
+
+### History window
+
+Pass `--days N` to control how many days of price history are fetched from CoinGecko. Default is 90 days.
+
 ## Development
 
 ```bash
@@ -260,7 +290,7 @@ python3 -m pip install -r requirements-dev.txt
 python3 -m pytest
 
 # Lint for unused imports / undefined names
-python3 -m pyflakes CryptoPriceTracker.py ledger.py costbasis.py holdings.py tax.py report.py analytics.py rebalance.py backtest.py marketdata.py rebalance_report.py staking.py staking_api.py staking_report.py news_source.py news.py news_report.py
+python3 -m pyflakes CryptoPriceTracker.py ledger.py costbasis.py holdings.py tax.py report.py analytics.py rebalance.py backtest.py marketdata.py rebalance_report.py staking.py staking_api.py staking_report.py news_source.py news.py news_report.py history.py chart.py history_report.py
 ```
 
 ## Project Structure
@@ -284,6 +314,9 @@ Crypto-Price-Tracker/
 ├── news_source.py                     # RSS feed and CryptoPanic fetch; DOCTYPE guard (stdlib-only, no defusedxml)
 ├── news.py                            # News config loading, per-coin keyword filtering, lexicon sentiment
 ├── news_report.py                     # Format per-coin sentiment summary and headline list
+├── history.py                         # Ledger-replay holdings as-of a date, daily series reconstruction, JSONL snapshots
+├── chart.py                           # Unicode sparkline and horizontal-bar chart primitives
+├── history_report.py                  # Format chart, playback, and per-day snapshot output
 ├── taxconfig.json                     # US tax-rate preset (editable; missing/bad file falls back to defaults)
 ├── transactions.csv                   # Sample CSV import template
 ├── targets.sample.json                # Sample custom rebalancing targets (copy to targets.json to use)
@@ -308,7 +341,10 @@ Crypto-Price-Tracker/
 │   ├── test_staking_report.py         # format_yield, format_rewards, format_comparison, format_combined_pl
 │   ├── test_news_source.py            # fetch_rss (parse, HTTP error, DOCTYPE guard), fetch_cryptopanic (mocked)
 │   ├── test_news.py                   # load_news_config, keywords_for, filter_items, classify_sentiment, sentiment_summary
-│   └── test_news_report.py            # format_coin_news: items, limit, no-items
+│   ├── test_news_report.py            # format_coin_news: items, limit, no-items
+│   ├── test_history.py                # holdings_as_of, reconstruct_series, make/append/load snapshots
+│   ├── test_chart.py                  # sparkline (empty, uniform, scaled) and hbar (positive, negative, zero)
+│   └── test_history_report.py        # format_chart, format_playback (news markers), format_snapshot
 ├── requirements.txt                   # Runtime dependency (requests)
 └── requirements-dev.txt               # Dev/test dependencies (pytest, pyflakes)
 ```
