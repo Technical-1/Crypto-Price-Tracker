@@ -204,6 +204,52 @@ date,coin,quantity
 
 Realized rewards are valued at the **current** live price (treated as zero-cost income) and added to the portfolio's unrealized profit to produce the combined P/L total.
 
+## News & Sentiment
+
+```bash
+python3 CryptoPriceTracker.py news [--coin ID] [--limit 5]
+```
+
+The `news` subcommand fetches recent headlines for each tracked coin (or one specific coin via `--coin`) and prints a per-coin block containing:
+
+- A sentiment summary line: coin name, overall sentiment label, and bullish/bearish/neutral counts.
+- Up to `--limit` dated headlines (default 5), each tagged bullish/bearish/neutral, with a clickable article URL on the following line.
+
+### News sources
+
+By default, news is pulled from keyless RSS feeds (no API key required). To use additional sources or customise behaviour, copy `news.sample.json` to `news.json` (git-ignored) and edit it:
+
+```json
+{
+  "feeds": ["https://cointelegraph.com/rss"],
+  "cryptopanic_token": "",
+  "keywords": {
+    "bitcoin": ["bitcoin", "btc"],
+    "ethereum": ["ethereum", "eth"]
+  }
+}
+```
+
+| Field | Description |
+|---|---|
+| `feeds` | List of RSS feed URLs to pool. Replaces the built-in default if non-empty. |
+| `cryptopanic_token` | Optional [CryptoPanic](https://cryptopanic.com/developers/api/) API token. When set, CryptoPanic results are pooled alongside RSS headlines. |
+| `keywords` | Per-coin list of match terms. If a coin has no entry, its CoinGecko ID is used as the sole keyword. |
+
+A feed that is unreachable, returns an HTTP error, or contains a DOCTYPE is skipped with a notice on stderr; remaining feeds still run.
+
+### Headline filtering
+
+Headlines are matched per coin using whole-word, case-insensitive keyword search against the title. For example, the keyword `eos` matches "EOS mainnet" but not "theos protocol", so coins with short or common identifiers can be disambiguated via the `keywords` config.
+
+### Sentiment
+
+Sentiment is classified by a naive keyword-lexicon heuristic, not machine learning. Each headline title is scanned for a fixed set of bullish words (e.g. "surge", "rally", "adoption", "bullish") and bearish words (e.g. "crash", "hack", "lawsuit", "bearish"). The label with the higher count wins; a tie or no match yields "neutral". The per-coin summary tallies all matched headlines and picks the majority label the same way.
+
+### Security note
+
+RSS feeds that declare a `<!DOCTYPE ...>` are rejected before parsing. The stdlib `xml.etree` does not resolve external entities (so XXE/SSRF is not exploitable), but a DOCTYPE with custom entity definitions is the vector for billion-laughs denial-of-service. Rejecting DOCTYPE keeps the project stdlib-only (no `defusedxml` dependency) while closing that vector.
+
 ## Development
 
 ```bash
@@ -214,7 +260,7 @@ python3 -m pip install -r requirements-dev.txt
 python3 -m pytest
 
 # Lint for unused imports / undefined names
-python3 -m pyflakes CryptoPriceTracker.py ledger.py costbasis.py holdings.py tax.py report.py analytics.py rebalance.py backtest.py marketdata.py rebalance_report.py staking.py staking_api.py staking_report.py
+python3 -m pyflakes CryptoPriceTracker.py ledger.py costbasis.py holdings.py tax.py report.py analytics.py rebalance.py backtest.py marketdata.py rebalance_report.py staking.py staking_api.py staking_report.py news_source.py news.py news_report.py
 ```
 
 ## Project Structure
@@ -235,11 +281,15 @@ Crypto-Price-Tracker/
 ├── staking.py                         # Pure staking logic: load config/rewards, effective APYs, yield, combined P/L
 ├── staking_api.py                     # Best-effort DefiLlama APY fetch (network); returns fraction per symbol
 ├── staking_report.py                  # Format yield, rewards, staked-vs-not, and combined P/L sections
+├── news_source.py                     # RSS feed and CryptoPanic fetch; DOCTYPE guard (stdlib-only, no defusedxml)
+├── news.py                            # News config loading, per-coin keyword filtering, lexicon sentiment
+├── news_report.py                     # Format per-coin sentiment summary and headline list
 ├── taxconfig.json                     # US tax-rate preset (editable; missing/bad file falls back to defaults)
 ├── transactions.csv                   # Sample CSV import template
 ├── targets.sample.json                # Sample custom rebalancing targets (copy to targets.json to use)
 ├── staking.sample.json                # Sample staking config (copy to staking.json to use)
 ├── rewards.sample.csv                 # Sample staking rewards log (copy to rewards.csv to use)
+├── news.sample.json                   # Sample news config (copy to news.json to use)
 ├── tests/
 │   ├── test_crypto_price_tracker.py   # Original suite: fetch, profit math, skip paths
 │   ├── test_ledger.py                 # Ledger validation, JSON round-trip, CSV import, interactive add
@@ -247,7 +297,7 @@ Crypto-Price-Tracker/
 │   ├── test_holdings.py               # Holdings derivation and ledger-or-default loading
 │   ├── test_tax.py                    # Config loading, summarize, progressive brackets, tax floors
 │   ├── test_report.py                 # Format helpers for realized, unrealized, and tax sections
-│   ├── test_cli.py                    # Argparse builder and run_tax / run_rebalance / run_staking integration
+│   ├── test_cli.py                    # Argparse builder and run_tax / run_rebalance / run_staking / run_news integration
 │   ├── test_analytics.py              # daily_returns, volatility, correlation, portfolio_volatility
 │   ├── test_rebalance.py              # target_weights, load_targets, compute_trades
 │   ├── test_backtest.py               # buy_and_hold_return with renormalization
@@ -255,7 +305,10 @@ Crypto-Price-Tracker/
 │   ├── test_rebalance_report.py       # format_* helpers for all five report sections
 │   ├── test_staking.py                # load_config, load_rewards, effective_apys, projected_yield, combined_pl
 │   ├── test_staking_api.py            # fetch_apys: TVL selection, unmatched symbol, HTTP error (mocked network)
-│   └── test_staking_report.py        # format_yield, format_rewards, format_comparison, format_combined_pl
+│   ├── test_staking_report.py         # format_yield, format_rewards, format_comparison, format_combined_pl
+│   ├── test_news_source.py            # fetch_rss (parse, HTTP error, DOCTYPE guard), fetch_cryptopanic (mocked)
+│   ├── test_news.py                   # load_news_config, keywords_for, filter_items, classify_sentiment, sentiment_summary
+│   └── test_news_report.py            # format_coin_news: items, limit, no-items
 ├── requirements.txt                   # Runtime dependency (requests)
 └── requirements-dev.txt               # Dev/test dependencies (pytest, pyflakes)
 ```

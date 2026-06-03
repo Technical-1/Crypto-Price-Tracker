@@ -1,0 +1,8 @@
+{
+  "feeds": ["https://cointelegraph.com/rss"],
+  "cryptopanic_token": "",
+  "keywords": {
+    "bitcoin": ["bitcoin", "btc"],
+    "ethereum": ["ethereum", "eth"]
+  }
+}
