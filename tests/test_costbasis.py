@@ -37,12 +37,12 @@ def test_fifo_consumes_oldest_lot_first_across_two_lots():
 
 def test_fifo_partial_lot_sell_splits_remaining():
     txns = [
-        Transaction("2024-01-01", "bitcoin", "buy", 2.0, 100.0, 0.0),   # basis 50/unit
+        Transaction("2024-01-01", "bitcoin", "buy", 2.0, 100.0, 0.0),   # 100/unit (total 200)
         Transaction("2024-02-01", "bitcoin", "sell", 0.5, 80.0, 0.0),
     ]
     disposals, remaining = costbasis.process_ledger(txns, method="fifo", long_term_threshold=365)
     assert disposals[0].quantity == 0.5
-    assert disposals[0].cost_basis == 25.0       # 0.5 * 50
+    assert disposals[0].cost_basis == 50.0       # 0.5 * 100
     assert disposals[0].proceeds == 40.0         # 0.5 * 80
     assert remaining["bitcoin"][0].quantity == 1.5
 
@@ -98,10 +98,10 @@ def test_lifo_consumes_newest_lot_first():
 def test_average_uses_pooled_basis():
     txns = [
         Transaction("2024-01-01", "bitcoin", "buy", 1.0, 100.0, 0.0),
-        Transaction("2024-03-01", "bitcoin", "buy", 3.0, 300.0, 0.0),  # 300 for 3 -> 100/unit
+        Transaction("2024-03-01", "bitcoin", "buy", 3.0, 100.0, 0.0),  # 100/unit
         Transaction("2024-04-01", "bitcoin", "sell", 2.0, 250.0, 0.0),
     ]
-    # pooled basis = (100 + 900)/4 = 250 total / ... per-unit = (100*1 + 100*3)/4 = 100
+    # pooled per-unit basis = (1*100 + 3*100)/4 = 100/unit
     disposals, _ = costbasis.process_ledger(txns, method="average", long_term_threshold=365)
     assert sum(d.cost_basis for d in disposals) == 200.0   # 2 units * 100 avg
     assert sum(d.proceeds for d in disposals) == 500.0     # 2 * 250

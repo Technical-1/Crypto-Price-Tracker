@@ -39,7 +39,7 @@ def process_ledger(txns, method="fifo", long_term_threshold=365):
     for t in ordered:
         bucket = lots.setdefault(t.coin, [])
         if t.action == "buy":
-            basis_per_unit = (t.price_usd + t.fee_usd) / t.quantity
+            basis_per_unit = (t.price_usd * t.quantity + t.fee_usd) / t.quantity
             bucket.append(Lot(t.date, t.quantity, basis_per_unit))
             continue
 
