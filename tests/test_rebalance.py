@@ -35,3 +35,31 @@ def test_custom_weights_passthrough():
 def test_unknown_strategy_raises():
     with pytest.raises(ValueError, match="strategy"):
         rebalance.target_weights("magic", ["bitcoin"])
+
+
+import json
+
+
+def test_load_targets_valid(tmp_path):
+    path = tmp_path / "targets.json"
+    path.write_text(json.dumps({"bitcoin": 0.6, "ethereum": 0.4}))
+    assert rebalance.load_targets(str(path)) == {"bitcoin": 0.6, "ethereum": 0.4}
+
+
+def test_load_targets_missing_file_raises(tmp_path):
+    with pytest.raises(ValueError, match="not found"):
+        rebalance.load_targets(str(tmp_path / "nope.json"))
+
+
+def test_load_targets_bad_sum_raises(tmp_path):
+    path = tmp_path / "targets.json"
+    path.write_text(json.dumps({"bitcoin": 0.6, "ethereum": 0.6}))  # sums 1.2
+    with pytest.raises(ValueError, match="sum"):
+        rebalance.load_targets(str(path))
+
+
+def test_load_targets_malformed_json_raises(tmp_path):
+    path = tmp_path / "targets.json"
+    path.write_text("{not json")
+    with pytest.raises(ValueError):
+        rebalance.load_targets(str(path))
