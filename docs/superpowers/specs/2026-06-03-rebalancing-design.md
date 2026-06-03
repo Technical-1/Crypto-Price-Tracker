@@ -83,9 +83,9 @@ Tax formatting stays in `report.py`; rebalance formatting lives in
   price list. Fewer than 2 prices → `[]`.
 - `volatility(returns)` → `statistics.pstdev(returns)` (daily). `annualize(v)` →
   `v * sqrt(365)`. Both return `0.0` for empty/singleton input.
-- `correlation(returns_a, returns_b)` → Pearson correlation over the overlapping
-  length; defined via `statistics.correlation` (Python ≥3.10) with a manual
-  fallback; constant series → `0.0` (documented).
+- `correlation(returns_a, returns_b)` → Pearson correlation computed directly
+  (covariance over the product of standard deviations) on the overlapping prefix;
+  a constant (zero-variance) series yields `0.0`.
 - `correlation_matrix(returns_by_coin)` → `{(a, b): corr}` for all pairs
   (diagonal 1.0).
 - `portfolio_volatility(weights, vols, corr)` → `sqrt(Σ_i Σ_j w_i w_j σ_i σ_j ρ_ij)`.

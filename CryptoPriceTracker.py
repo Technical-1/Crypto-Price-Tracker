@@ -203,6 +203,10 @@ def run_rebalance(ledger_path=LEDGER_PATH, targets_path=TARGETS_PATH,
         sys.exit(1)
 
     trades = rebalance_mod.compute_trades(current_values, weights, prices)
+    for t in trades:
+        if abs(t["delta_usd"]) > 1e-6 and t["coin_amount"] == 0:
+            print(f"  (note: no live price for {t['coin']}; coin amount unavailable, "
+                  f"USD delta {t['delta_usd']:.2f})", file=sys.stderr)
     print(rebalance_report.format_trades(trades))
     print()
 
