@@ -112,6 +112,47 @@ To filter the tax report to a single tax year:
 python3 CryptoPriceTracker.py tax --year 2024
 ```
 
+## Portfolio Rebalancing
+
+```bash
+python3 CryptoPriceTracker.py rebalance [--strategy equal|marketcap|custom] [--days 90]
+```
+
+The `rebalance` subcommand prints five sections for your current portfolio:
+
+1. **Current allocation** — each coin's USD value and percentage of the portfolio.
+2. **Risk (volatility)** — per-coin daily and annualized volatility (population stdev of daily returns). Portfolio volatility is also shown when at least two coins have sufficient price history. The correlation/portfolio-volatility section is skipped if fewer than two coins have history.
+3. **Correlation matrix** — pairwise Pearson correlation among holdings, shown when at least two coins have history.
+4. **Rebalancing trades** — buy/sell amounts (in USD and coin units) needed to reach the target allocation, keeping total portfolio value constant.
+5. **Backtest** — simple buy-and-hold return over the chosen window (`--days`) for both your current weights and the target weights, so you can see how each would have performed.
+
+### Strategies
+
+| Flag | Behaviour |
+|---|---|
+| `--strategy equal` (default) | Equal weight across all holdings |
+| `--strategy marketcap` | Weight proportional to live CoinGecko market cap |
+| `--strategy custom` | Weights loaded from `targets.json` in the working directory |
+
+### Custom targets
+
+Copy `targets.sample.json` to `targets.json` and edit it to set your desired weights:
+
+```json
+{
+  "bitcoin": 0.4,
+  "ethereum": 0.3,
+  "stellar": 0.2,
+  "uniswap": 0.1
+}
+```
+
+Weights must sum to exactly 1.0 (tolerance ±1e-6). `targets.json` is git-ignored — it is a runtime file, not committed.
+
+### History window
+
+Pass `--days N` to control how many days of price history are fetched from CoinGecko for the volatility and backtest calculations. Default is 90 days.
+
 ## Development
 
 ```bash
@@ -122,7 +163,7 @@ python3 -m pip install -r requirements-dev.txt
 python3 -m pytest
 
 # Lint for unused imports / undefined names
-python3 -m pyflakes CryptoPriceTracker.py ledger.py costbasis.py holdings.py tax.py report.py
+python3 -m pyflakes CryptoPriceTracker.py ledger.py costbasis.py holdings.py tax.py report.py analytics.py rebalance.py backtest.py marketdata.py rebalance_report.py
 ```
 
 ## Project Structure
@@ -135,8 +176,14 @@ Crypto-Price-Tracker/
 ├── holdings.py                        # Derives current holdings from ledger; falls back to built-in dict
 ├── tax.py                             # Tax config loading, realized-gain summary, and tax liability estimate
 ├── report.py                          # Formats realized, unrealized, and tax sections as text
+├── analytics.py                       # Pure risk math: daily returns, volatility, correlation, portfolio volatility
+├── rebalance.py                       # Target-weight strategies (equal, marketcap, custom) and trade computation
+├── backtest.py                        # Buy-and-hold backtest over a price history window
+├── marketdata.py                      # Historical price and market-cap fetching from CoinGecko
+├── rebalance_report.py                # Format allocation, risk, correlation, trades, and backtest sections
 ├── taxconfig.json                     # US tax-rate preset (editable; missing/bad file falls back to defaults)
 ├── transactions.csv                   # Sample CSV import template
+├── targets.sample.json                # Sample custom rebalancing targets (copy to targets.json to use)
 ├── tests/
 │   ├── test_crypto_price_tracker.py   # Original suite: fetch, profit math, skip paths
 │   ├── test_ledger.py                 # Ledger validation, JSON round-trip, CSV import, interactive add
@@ -144,7 +191,12 @@ Crypto-Price-Tracker/
 │   ├── test_holdings.py               # Holdings derivation and ledger-or-default loading
 │   ├── test_tax.py                    # Config loading, summarize, progressive brackets, tax floors
 │   ├── test_report.py                 # Format helpers for realized, unrealized, and tax sections
-│   └── test_cli.py                    # Argparse builder and run_tax integration
+│   ├── test_cli.py                    # Argparse builder and run_tax / run_rebalance integration
+│   ├── test_analytics.py              # daily_returns, volatility, correlation, portfolio_volatility
+│   ├── test_rebalance.py              # target_weights, load_targets, compute_trades
+│   ├── test_backtest.py               # buy_and_hold_return with renormalization
+│   ├── test_marketdata.py             # fetch_history, fetch_market_caps (mocked network)
+│   └── test_rebalance_report.py       # format_* helpers for all five report sections
 ├── requirements.txt                   # Runtime dependency (requests)
 └── requirements-dev.txt               # Dev/test dependencies (pytest, pyflakes)
 ```
