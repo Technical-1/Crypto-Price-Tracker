@@ -1,0 +1,4 @@
+{
+  "ethereum": {"staked_qty": 2.0, "symbol": "ETH", "apy": 0.04},
+  "stellar": {"staked_qty": 1000.0, "symbol": "XLM", "apy": 0.03}
+}

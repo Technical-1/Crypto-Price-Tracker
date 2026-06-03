@@ -153,6 +153,57 @@ Weights must sum to exactly 1.0 (tolerance ±1e-6). `targets.json` is git-ignore
 
 Pass `--days N` to control how many days of price history are fetched from CoinGecko for the volatility and backtest calculations. Default is 90 days.
 
+## Staking & Yield
+
+```bash
+python3 CryptoPriceTracker.py staking [--days 365]
+```
+
+The `staking` subcommand prints four sections for your staked holdings:
+
+1. **Staking yield** — projected yield over the chosen horizon (`--days`) per coin, showing APY %, source (API or manual), staked quantity, crypto yield, and USD equivalents (period and monthly).
+2. **Realized staking rewards** — rewards loaded from `rewards.csv` summed per coin, valued at the current live price (zero-cost income), with a total USD value.
+3. **Staked vs not staked** — extra annual USD income that staking provides relative to an unstaked position.
+4. **Combined profit/loss** — portfolio unrealized profit (from the ledger) plus the realized reward value for a combined total.
+
+### staking.json schema
+
+Copy `staking.sample.json` to `staking.json` (git-ignored) and edit it to match your positions:
+
+```json
+{
+  "ethereum": {"staked_qty": 2.0, "symbol": "ETH", "apy": 0.04},
+  "stellar": {"staked_qty": 1000.0, "symbol": "XLM", "apy": 0.03}
+}
+```
+
+| Field | Required | Description |
+|---|---|---|
+| `staked_qty` | Yes | Number of units currently staked (must be positive) |
+| `symbol` | No | Ticker symbol used to look up APY from DefiLlama (e.g. `ETH`) |
+| `apy` | No | Manual APY as a decimal (e.g. `0.04` = 4 %) — used as fallback when the API returns nothing |
+
+APY is fetched best-effort from [DefiLlama yields](https://yields.llama.fi/pools), matched by `symbol`. For each symbol the pool with the highest TVL is chosen and its APY is used. If the API is unreachable or the symbol has no match, the manual `apy` field is used instead. DefiLlama includes DeFi liquidity pools as well as native protocol staking, so the figure is an approximation of on-chain staking yield rather than an exact protocol rate.
+
+### rewards.csv schema
+
+Copy `rewards.sample.csv` to `rewards.csv` (git-ignored) and append a row for every reward event:
+
+```
+date,coin,quantity
+2024-01-15,ethereum,0.012
+2024-02-15,ethereum,0.013
+2024-02-20,stellar,25
+```
+
+| Column | Description |
+|---|---|
+| `date` | ISO date `YYYY-MM-DD` of the reward |
+| `coin` | CoinGecko coin ID (e.g. `ethereum`, `stellar`) |
+| `quantity` | Number of units received |
+
+Realized rewards are valued at the **current** live price (treated as zero-cost income) and added to the portfolio's unrealized profit to produce the combined P/L total.
+
 ## Development
 
 ```bash
@@ -163,7 +214,7 @@ python3 -m pip install -r requirements-dev.txt
 python3 -m pytest
 
 # Lint for unused imports / undefined names
-python3 -m pyflakes CryptoPriceTracker.py ledger.py costbasis.py holdings.py tax.py report.py analytics.py rebalance.py backtest.py marketdata.py rebalance_report.py
+python3 -m pyflakes CryptoPriceTracker.py ledger.py costbasis.py holdings.py tax.py report.py analytics.py rebalance.py backtest.py marketdata.py rebalance_report.py staking.py staking_api.py staking_report.py
 ```
 
 ## Project Structure
@@ -181,9 +232,14 @@ Crypto-Price-Tracker/
 ├── backtest.py                        # Buy-and-hold backtest over a price history window
 ├── marketdata.py                      # Historical price and market-cap fetching from CoinGecko
 ├── rebalance_report.py                # Format allocation, risk, correlation, trades, and backtest sections
+├── staking.py                         # Pure staking logic: load config/rewards, effective APYs, yield, combined P/L
+├── staking_api.py                     # Best-effort DefiLlama APY fetch (network); returns fraction per symbol
+├── staking_report.py                  # Format yield, rewards, staked-vs-not, and combined P/L sections
 ├── taxconfig.json                     # US tax-rate preset (editable; missing/bad file falls back to defaults)
 ├── transactions.csv                   # Sample CSV import template
 ├── targets.sample.json                # Sample custom rebalancing targets (copy to targets.json to use)
+├── staking.sample.json                # Sample staking config (copy to staking.json to use)
+├── rewards.sample.csv                 # Sample staking rewards log (copy to rewards.csv to use)
 ├── tests/
 │   ├── test_crypto_price_tracker.py   # Original suite: fetch, profit math, skip paths
 │   ├── test_ledger.py                 # Ledger validation, JSON round-trip, CSV import, interactive add
@@ -191,12 +247,15 @@ Crypto-Price-Tracker/
 │   ├── test_holdings.py               # Holdings derivation and ledger-or-default loading
 │   ├── test_tax.py                    # Config loading, summarize, progressive brackets, tax floors
 │   ├── test_report.py                 # Format helpers for realized, unrealized, and tax sections
-│   ├── test_cli.py                    # Argparse builder and run_tax / run_rebalance integration
+│   ├── test_cli.py                    # Argparse builder and run_tax / run_rebalance / run_staking integration
 │   ├── test_analytics.py              # daily_returns, volatility, correlation, portfolio_volatility
 │   ├── test_rebalance.py              # target_weights, load_targets, compute_trades
 │   ├── test_backtest.py               # buy_and_hold_return with renormalization
 │   ├── test_marketdata.py             # fetch_history, fetch_market_caps (mocked network)
-│   └── test_rebalance_report.py       # format_* helpers for all five report sections
+│   ├── test_rebalance_report.py       # format_* helpers for all five report sections
+│   ├── test_staking.py                # load_config, load_rewards, effective_apys, projected_yield, combined_pl
+│   ├── test_staking_api.py            # fetch_apys: TVL selection, unmatched symbol, HTTP error (mocked network)
+│   └── test_staking_report.py        # format_yield, format_rewards, format_comparison, format_combined_pl
 ├── requirements.txt                   # Runtime dependency (requests)
 └── requirements-dev.txt               # Dev/test dependencies (pytest, pyflakes)
 ```

@@ -10,3 +10,7 @@ ledger.json
 
 # Runtime custom rebalancing targets (copy targets.sample.json to create)
 targets.json
+
+# Runtime staking config and rewards (copy *.sample.* to create)
+staking.json
+rewards.csv
