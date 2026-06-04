@@ -729,3 +729,41 @@ def test_insufficient_lots_exits_1(tmp_path, capsys, monkeypatch):
     assert exc_info.value.code == 1
     err = capsys.readouterr().err
     assert "bitcoin" in err or "insufficient" in err.lower()
+
+
+# ── Task 29: --offline flag + stale-price path ────────────────────────────────
+
+def test_offline_flag_sets_context(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("COINGECKO_API_KEY", raising=False)
+    ctx = appconfig.build_context_from_env(data_dir=str(tmp_path),
+                                            method="fifo", select_file=None, offline=True)
+    assert ctx.offline is True
+
+
+def test_offline_stale_prices_exit_0(tmp_path, capsys, monkeypatch):
+    """With --offline, stale prices produce a notice but still exit 0."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("COINGECKO_API_KEY", raising=False)
+    _write_coinbasis_ledger(tmp_path / "ledger.json", [])
+
+    mock_portfolio = MagicMock()
+    mock_portfolio.holdings.return_value = []
+    mock_portfolio.valuation.return_value = MagicMock(
+        assets=[], total_cost=Decimal("0"), total_value=Decimal("0"),
+        total_unrealized=Decimal("0"), total_return=Decimal("0"), missing_prices=[])
+
+    mock_book = MagicMock()
+    mock_book.prices_map.return_value = {}
+    mock_book.stale = True  # ← offline serves last-good
+    mock_book.quotes = {}
+    mock_book.sparklines = {}
+
+    with patch("coinbasis.Portfolio.from_transactions", return_value=mock_portfolio), \
+         patch("cryptolytics.CoinGeckoClient") as MockCl:
+        MockCl.return_value.prices.return_value = mock_book
+        cpt.cli(["--data-dir", str(tmp_path), "prices", "--offline"])
+
+    # Exit code 0 (stale is non-fatal)
+    err = capsys.readouterr().err
+    assert "stale" in err.lower() or "offline" in err.lower() or "last-good" in err.lower()

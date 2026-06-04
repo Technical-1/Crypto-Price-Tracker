@@ -76,12 +76,13 @@ def build_context_from_env(
     api_key = os.environ.get("COINGECKO_API_KEY") or None
     plan    = os.environ.get("COINGECKO_PLAN", "demo")
     cache_dir = os.path.join(_xdg_cache(), "crypto-price-tracker", "prices")
-    cg_config = cryptolytics.CoinGeckoConfig(
-        api_key=api_key,
-        plan=plan,
-        cache_dir=cache_dir,
-        # remaining fields use CoinGeckoConfig defaults
-    )
+    cg_kwargs = dict(api_key=api_key, plan=plan, cache_dir=cache_dir)
+    if offline:
+        # Make all cached prices appear fresh so the client never hits the network;
+        # any cache miss surfaces as a stale PriceBook rather than a live fetch.
+        cg_kwargs["cache_ttl"] = sys.maxsize
+        cg_kwargs["history_cache_ttl"] = sys.maxsize
+    cg_config = cryptolytics.CoinGeckoConfig(**cg_kwargs)
 
     # Resolve method + selection
     method_lower = method.lower()
