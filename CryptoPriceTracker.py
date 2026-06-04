@@ -15,8 +15,6 @@ import rebalance_report
 import staking_report
 import news_report
 import history_report
-import perf_report
-import chart
 
 # ── Legacy demo fallback (kept for backward-compat when ledger is absent) ─────
 originalHoldings = {
