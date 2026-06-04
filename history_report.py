@@ -1,6 +1,6 @@
 # history_report.py
 import chart as _chart
-import cryptolytics
+import coinlytics
 
 
 def format_chart(series: list[dict], news_markers: dict) -> str:
@@ -30,7 +30,7 @@ def format_playback(series: list[dict]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def format_snapshot(snap: cryptolytics.Snapshot, rows: list[dict]) -> str:
+def format_snapshot(snap: coinlytics.Snapshot, rows: list[dict]) -> str:
     """Single-day snapshot detail view."""
     lines = [
         f"Snapshot: {snap.date}",

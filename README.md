@@ -17,12 +17,12 @@ Coinbase didn't give me a clear overall profit figure for the coins I held, so I
 
 - **Language**: Python 3
 - **Cost-basis engine**: [`coinbasis`](https://pypi.org/project/coinbasis/) — multi-wallet ledger, lot matching, tax estimation
-- **Market data & analytics**: [`cryptolytics`](https://pypi.org/project/cryptolytics/) — CoinGecko/DefiLlama/RSS access, rebalancing, performance, news
-- **Data source**: CoinGecko public REST API (via `cryptolytics`)
+- **Market data & analytics**: [`coinlytics`](https://pypi.org/project/coinlytics/) — CoinGecko/DefiLlama/RSS access, rebalancing, performance, news
+- **Data source**: CoinGecko public REST API (via `coinlytics`)
 - **Testing**: `pytest`
 - **Linting**: `ruff`
 
-This tool is a thin CLI: all business logic lives in the `coinbasis` and `cryptolytics`
+This tool is a thin CLI: all business logic lives in the `coinbasis` and `coinlytics`
 packages. The app only handles argument parsing, file/config I/O (`appio.py`,
 `appconfig.py`), and output formatting (`*_report.py`, `chart.py`).
 
@@ -36,7 +36,7 @@ packages. The app only handles argument parsing, file/config I/O (`appio.py`,
 ### Installation
 
 ```bash
-python3 -m pip install coinbasis cryptolytics
+python3 -m pip install coinbasis coinlytics
 ```
 
 The two packages are the only runtime dependencies (declared in `pyproject.toml`).
@@ -380,7 +380,7 @@ Pass `--days N` to control how many days of price history are fetched from CoinG
 ```bash
 # Install the app plus the two packages in editable mode for local development
 python3 -m pip install -e .
-python3 -m pip install -e ../coinbasis -e ../cryptolytics   # if developing the packages too
+python3 -m pip install -e ../coinbasis -e ../coinlytics   # if developing the packages too
 
 # Run the test suite
 python3 -m pytest
@@ -389,7 +389,7 @@ python3 -m pytest
 python3 -m ruff check .
 ```
 
-All tests mock the `coinbasis` and `cryptolytics` calls (no live CoinGecko/DefiLlama/RSS
+All tests mock the `coinbasis` and `coinlytics` calls (no live CoinGecko/DefiLlama/RSS
 network access), so the suite runs offline and deterministically.
 
 ## Project Structure
@@ -406,7 +406,7 @@ Crypto-Price-Tracker/
 ├── history_report.py                  # Format chart, playback, and per-day snapshot output
 ├── perf_report.py                     # Format performance metrics + sparkline
 ├── chart.py                           # Unicode sparkline and horizontal-bar chart primitives
-├── pyproject.toml                     # Project metadata + deps (coinbasis, cryptolytics)
+├── pyproject.toml                     # Project metadata + deps (coinbasis, coinlytics)
 ├── taxconfig.json                     # US tax-rate preset (editable; missing/bad file falls back to defaults)
 ├── transactions.csv                   # Sample CSV import template
 ├── targets.sample.json                # Sample custom rebalancing targets (copy to targets.json to use)
@@ -423,7 +423,7 @@ Crypto-Price-Tracker/
 ```
 
 All cost-basis math, lot matching, tax estimation, market-data fetching, analytics,
-staking, news, and history reconstruction now live in the `coinbasis` and `cryptolytics`
+staking, news, and history reconstruction now live in the `coinbasis` and `coinlytics`
 packages rather than in this repository.
 
 ## License

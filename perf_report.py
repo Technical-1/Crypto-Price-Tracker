@@ -1,12 +1,12 @@
 # perf_report.py
 """Performance view formatter: sparkline + PerfMetrics table."""
-import cryptolytics
+import coinlytics
 import chart as _chart
 
 
 def format_performance(
-    history: list[cryptolytics.Snapshot],
-    metrics: cryptolytics.PerfMetrics,
+    history: list[coinlytics.Snapshot],
+    metrics: coinlytics.PerfMetrics,
 ) -> str:
     """Render a value sparkline and PerfMetrics.
 

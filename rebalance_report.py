@@ -1,8 +1,8 @@
 # rebalance_report.py
-import cryptolytics
+import coinlytics
 
 
-def format_trades(plan: cryptolytics.RebalancePlan) -> str:
+def format_trades(plan: coinlytics.RebalancePlan) -> str:
     if plan.in_balance:
         return "Portfolio is in balance. No trades needed.\n"
     lines = ["Proposed Trades"]
@@ -29,7 +29,7 @@ def format_trades(plan: cryptolytics.RebalancePlan) -> str:
     return "\n".join(lines) + "\n"
 
 
-def format_allocation(plan: cryptolytics.RebalancePlan) -> str:
+def format_allocation(plan: coinlytics.RebalancePlan) -> str:
     lines = ["Current vs Target Allocation"]
     header = f"{'Asset':<14} {'Current':>12} {'Target':>12} {'Target%':>8} {'Drift':>12}"
     lines.append(header)

@@ -11,7 +11,7 @@ import pytest
 
 import appio
 import coinbasis
-import cryptolytics
+import coinlytics
 
 
 def _write_json(path, obj):
@@ -32,7 +32,7 @@ def test_migrated_modules_are_deleted():
 
 def test_packages_importable():
     import coinbasis          # noqa: F401
-    import cryptolytics       # noqa: F401
+    import coinlytics       # noqa: F401
 
 
 def test_load_ledger_coinbasis_schema_empty(tmp_path):
@@ -266,7 +266,7 @@ def test_load_targets_missing_returns_none(tmp_path):
 def test_load_news_config_defaults_on_missing(tmp_path):
     cfg = appio.load_news_config(str(tmp_path / "news.json"))
     assert "feeds" in cfg
-    assert cfg["feeds"] == list(cryptolytics.DEFAULT_FEEDS)
+    assert cfg["feeds"] == list(coinlytics.DEFAULT_FEEDS)
 
 
 def test_load_rewards_csv(tmp_path):
@@ -283,8 +283,8 @@ def test_load_rewards_csv(tmp_path):
 
 def test_snapshots_round_trip(tmp_path):
     path = str(tmp_path / "snapshots.jsonl")
-    snap1 = cryptolytics.Snapshot(date="2024-01-01", total_value=1000.0, cost=800.0, pl=200.0)
-    snap2 = cryptolytics.Snapshot(date="2024-01-02", total_value=1100.0, cost=800.0, pl=300.0)
+    snap1 = coinlytics.Snapshot(date="2024-01-01", total_value=1000.0, cost=800.0, pl=200.0)
+    snap2 = coinlytics.Snapshot(date="2024-01-02", total_value=1100.0, cost=800.0, pl=300.0)
 
     appio.save_snapshots(path, [snap1, snap2])
     loaded = appio.load_snapshots(path)
@@ -302,7 +302,7 @@ def test_load_snapshots_missing_returns_empty(tmp_path):
 def test_save_snapshots_is_atomic(tmp_path):
     """save_snapshots should not leave a corrupt file on success."""
     path = str(tmp_path / "snapshots.jsonl")
-    snaps = [cryptolytics.Snapshot(date="2024-01-01", total_value=500.0, cost=400.0, pl=100.0)]
+    snaps = [coinlytics.Snapshot(date="2024-01-01", total_value=500.0, cost=400.0, pl=100.0)]
     appio.save_snapshots(path, snaps)
     assert os.path.exists(path)
     loaded = appio.load_snapshots(path)

@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 
 import pytest
-import cryptolytics
+import coinlytics
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -74,14 +74,14 @@ def tmp_v1_ledger(tmp_path, v1_ledger_data):
 @pytest.fixture
 def mock_quotes():
     return {
-        "bitcoin": cryptolytics.Quote(
+        "bitcoin": coinlytics.Quote(
             price=Decimal("50000"),
             change_24h=Decimal("2.5"),
             change_7d=Decimal("5.0"),
             market_cap=Decimal("1000000000000"),
             volume_24h=Decimal("30000000000"),
         ),
-        "ethereum": cryptolytics.Quote(
+        "ethereum": coinlytics.Quote(
             price=Decimal("3000"),
             change_24h=Decimal("-1.0"),
             change_7d=Decimal("3.0"),
@@ -98,14 +98,14 @@ def mock_history():
     today = date.today()
     return {
         "bitcoin": [
-            cryptolytics.HistoryPoint(
+            coinlytics.HistoryPoint(
                 date=(today - timedelta(days=9 - i)).isoformat(),
                 price=float(45000 + i * 500),
             )
             for i in range(10)
         ],
         "ethereum": [
-            cryptolytics.HistoryPoint(
+            coinlytics.HistoryPoint(
                 date=(today - timedelta(days=9 - i)).isoformat(),
                 price=float(2800 + i * 20),
             )
@@ -124,8 +124,8 @@ def mock_market_caps():
 
 @pytest.fixture
 def mock_client(mock_quotes, mock_history, mock_market_caps):
-    """A cryptolytics.MockClient with BTC + ETH fixtures; no network calls."""
-    return cryptolytics.MockClient(
+    """A coinlytics.MockClient with BTC + ETH fixtures; no network calls."""
+    return coinlytics.MockClient(
         quotes=mock_quotes,
         history=mock_history,
         market_caps=mock_market_caps,
@@ -136,7 +136,7 @@ def mock_client(mock_quotes, mock_history, mock_market_caps):
 @pytest.fixture
 def failing_mock_client(mock_quotes, mock_history, mock_market_caps):
     """MockClient that raises PriceSourceError for 'bitcoin' (error-path tests)."""
-    return cryptolytics.MockClient(
+    return coinlytics.MockClient(
         quotes=mock_quotes,
         history=mock_history,
         market_caps=mock_market_caps,

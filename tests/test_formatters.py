@@ -3,7 +3,7 @@
 from decimal import Decimal
 from datetime import datetime, timezone
 import coinbasis
-import cryptolytics
+import coinlytics
 import report
 import rebalance_report
 import staking_report
@@ -106,11 +106,11 @@ def test_format_unrealized_missing_prices_notice():
     assert "solana" in out or "missing" in out.lower()
 
 
-def _make_book(coins: dict) -> cryptolytics.PriceBook:
+def _make_book(coins: dict) -> coinlytics.PriceBook:
     """Build a minimal PriceBook for testing."""
     from datetime import datetime, timezone
     quotes = {
-        cid: cryptolytics.Quote(
+        cid: coinlytics.Quote(
             price=Decimal(str(data["price"])),
             change_24h=Decimal(str(data.get("change_24h", "0"))),
             change_7d=None,
@@ -119,7 +119,7 @@ def _make_book(coins: dict) -> cryptolytics.PriceBook:
         )
         for cid, data in coins.items()
     }
-    return cryptolytics.PriceBook(
+    return coinlytics.PriceBook(
         quotes=quotes,
         fetched_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
         stale=False,
@@ -218,8 +218,8 @@ def test_format_tax_shows_estimate():
     assert "US" in out or config.jurisdiction in out
 
 
-def _make_plan(in_balance: bool = False) -> cryptolytics.RebalancePlan:
-    from cryptolytics import RebalanceAction, RebalancePlan
+def _make_plan(in_balance: bool = False) -> coinlytics.RebalancePlan:
+    from coinlytics import RebalanceAction, RebalancePlan
     actions = [
         RebalanceAction(
             asset="bitcoin",
@@ -285,7 +285,7 @@ def test_format_staking_summary():
     assert "api" in out or "API" in out
 
 
-def test_news_report_uses_cryptolytics_sentiment():
+def test_news_report_uses_coinlytics_sentiment():
     """news_report.format_coin_news must NOT import the old news module."""
     items = [
         {"title": "Bitcoin surges to new highs", "link": "http://x.com/1",
@@ -310,8 +310,8 @@ def test_format_chart_renders_sparkline():
     )
 
 
-def test_format_snapshot_from_cryptolytics_snapshot():
-    snap = cryptolytics.Snapshot(date="2024-01-03", total_value=1200.0, cost=900.0, pl=300.0)
+def test_format_snapshot_from_coinlytics_snapshot():
+    snap = coinlytics.Snapshot(date="2024-01-03", total_value=1200.0, cost=900.0, pl=300.0)
     rows = [{"coin": "bitcoin", "qty": 1.0, "price": 1200.0, "value": 1200.0, "pl": 300.0}]
     out = history_report.format_snapshot(snap, rows)
     assert "bitcoin" in out
@@ -320,11 +320,11 @@ def test_format_snapshot_from_cryptolytics_snapshot():
 
 def test_format_performance_with_metrics():
     history = [
-        cryptolytics.Snapshot(date="2024-01-01", total_value=1000.0, cost=800.0, pl=200.0),
-        cryptolytics.Snapshot(date="2024-01-02", total_value=1100.0, cost=800.0, pl=300.0),
-        cryptolytics.Snapshot(date="2024-01-03", total_value=1050.0, cost=800.0, pl=250.0),
+        coinlytics.Snapshot(date="2024-01-01", total_value=1000.0, cost=800.0, pl=200.0),
+        coinlytics.Snapshot(date="2024-01-02", total_value=1100.0, cost=800.0, pl=300.0),
+        coinlytics.Snapshot(date="2024-01-03", total_value=1050.0, cost=800.0, pl=250.0),
     ]
-    metrics = cryptolytics.PerfMetrics(
+    metrics = coinlytics.PerfMetrics(
         volatility=0.05,
         sharpe=1.2,
         max_drawdown=0.04,
@@ -339,9 +339,9 @@ def test_format_performance_with_metrics():
 
 def test_format_performance_not_enough_history():
     history = [
-        cryptolytics.Snapshot(date="2024-01-01", total_value=1000.0, cost=800.0, pl=200.0),
+        coinlytics.Snapshot(date="2024-01-01", total_value=1000.0, cost=800.0, pl=200.0),
     ]
-    metrics = cryptolytics.PerfMetrics(
+    metrics = coinlytics.PerfMetrics(
         volatility=None, sharpe=None, max_drawdown=None,
         cumulative_return=None, period_returns=[],
     )

@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 
 import appconfig
 import coinbasis
-import cryptolytics
+import coinlytics
 import CryptoPriceTracker as cpt
 
 
@@ -222,7 +222,7 @@ def test_run_tax_prints_all_three_sections(tmp_path, capsys, monkeypatch):
     mock_book.stale = False
 
     with patch("coinbasis.Portfolio.from_transactions", return_value=mock_portfolio), \
-         patch("cryptolytics.CoinGeckoClient") as MockClient:
+         patch("coinlytics.CoinGeckoClient") as MockClient:
         MockClient.return_value.prices.return_value = mock_book
         cpt.cli(["--data-dir", str(tmp_path), "tax", "--year", "2024"])
 
@@ -255,7 +255,7 @@ def test_run_tax_year_filter(tmp_path, capsys, monkeypatch):
         Decimal("0"), Decimal("0"), Decimal("0"), Decimal("0"), Decimal("0"))
 
     with patch("coinbasis.Portfolio.from_transactions", return_value=mock_portfolio), \
-         patch("cryptolytics.CoinGeckoClient") as MockClient:
+         patch("coinlytics.CoinGeckoClient") as MockClient:
         MockClient.return_value.prices.return_value = MagicMock(
             prices_map=lambda: {}, stale=False)
         cpt.cli(["--data-dir", str(tmp_path), "tax", "--year", "2023"])
@@ -287,9 +287,9 @@ def test_run_rebalance_equal_strategy(tmp_path, capsys, monkeypatch):
     mock_plan.in_balance = True
 
     with patch("coinbasis.Portfolio.from_transactions", return_value=mock_portfolio), \
-         patch("cryptolytics.CoinGeckoClient") as MockClient, \
-         patch("cryptolytics.rebalance.compute_trades", return_value=mock_plan), \
-         patch("cryptolytics.rebalance.target_weights", return_value={}):
+         patch("coinlytics.CoinGeckoClient") as MockClient, \
+         patch("coinlytics.rebalance.compute_trades", return_value=mock_plan), \
+         patch("coinlytics.rebalance.target_weights", return_value={}):
         mock_client = MockClient.return_value
         mock_client.prices.return_value = MagicMock(prices_map=lambda: {}, stale=False)
         mock_client.history.return_value = []
@@ -308,8 +308,8 @@ def test_run_staking_no_config_exits(tmp_path, capsys, monkeypatch):
     monkeypatch.delenv("COINGECKO_API_KEY", raising=False)
     _write_coinbasis_ledger(tmp_path / "ledger.json", [])
 
-    with patch("cryptolytics.fetch_apys", return_value={}), \
-         patch("cryptolytics.CoinGeckoClient"):
+    with patch("coinlytics.fetch_apys", return_value={}), \
+         patch("coinlytics.CoinGeckoClient"):
         cpt.cli(["--data-dir", str(tmp_path), "staking"])
 
     out = capsys.readouterr().out
@@ -324,8 +324,8 @@ def test_run_news_with_mock_feed(tmp_path, capsys, monkeypatch):
     mock_items = [
         {"title": "Bitcoin surges", "link": "http://x.com", "published": "2024-01-01", "source": "RSS"},
     ]
-    with patch("cryptolytics.fetch_rss", return_value=mock_items), \
-         patch("cryptolytics.fetch_cryptopanic", return_value=[]):
+    with patch("coinlytics.fetch_rss", return_value=mock_items), \
+         patch("coinlytics.fetch_cryptopanic", return_value=[]):
         cpt.cli(["--data-dir", str(tmp_path), "news"])
 
     out = capsys.readouterr().out
@@ -340,9 +340,9 @@ def test_run_history_with_mock_client(tmp_path, capsys, monkeypatch):
 
     with patch("coinbasis.Portfolio.from_transactions", return_value=MagicMock(
         holdings=MagicMock(return_value=[])
-    )), patch("cryptolytics.CoinGeckoClient") as MockCl, \
-         patch("cryptolytics.fetch_rss", return_value=[]), \
-         patch("cryptolytics.fetch_cryptopanic", return_value=[]):
+    )), patch("coinlytics.CoinGeckoClient") as MockCl, \
+         patch("coinlytics.fetch_rss", return_value=[]), \
+         patch("coinlytics.fetch_cryptopanic", return_value=[]):
         MockCl.return_value.prices.return_value = MagicMock(prices_map=lambda: {}, stale=False)
         MockCl.return_value.history.return_value = []
         cpt.cli(["--data-dir", str(tmp_path), "history"])
@@ -390,7 +390,7 @@ def test_run_prices_with_ledger(tmp_path, capsys, monkeypatch):
     mock_book.prices_map.return_value = {"bitcoin": Decimal("60000")}
     mock_book.stale = False
     mock_book.quotes = {
-        "bitcoin": cryptolytics.Quote(
+        "bitcoin": coinlytics.Quote(
             price=Decimal("60000"), change_24h=Decimal("2.5"),
             change_7d=None, market_cap=None, volume_24h=None,
         )
@@ -398,7 +398,7 @@ def test_run_prices_with_ledger(tmp_path, capsys, monkeypatch):
     mock_book.sparklines = {}
 
     with patch("coinbasis.Portfolio.from_transactions", return_value=mock_portfolio), \
-         patch("cryptolytics.CoinGeckoClient") as MockCl:
+         patch("coinlytics.CoinGeckoClient") as MockCl:
         MockCl.return_value.prices.return_value = mock_book
         cpt.cli(["--data-dir", str(tmp_path), "prices"])
 
@@ -444,7 +444,7 @@ def test_run_prices_sparkline_fetches_series(tmp_path, capsys, monkeypatch):
     mock_book.prices_map.return_value = {"bitcoin": Decimal("60000")}
     mock_book.stale = False
     mock_book.quotes = {
-        "bitcoin": cryptolytics.Quote(
+        "bitcoin": coinlytics.Quote(
             price=Decimal("60000"), change_24h=Decimal("2.5"),
             change_7d=Decimal("5.0"), market_cap=None, volume_24h=None,
         )
@@ -452,7 +452,7 @@ def test_run_prices_sparkline_fetches_series(tmp_path, capsys, monkeypatch):
     mock_book.sparklines = {}
 
     with patch("coinbasis.Portfolio.from_transactions", return_value=mock_portfolio), \
-         patch("cryptolytics.CoinGeckoClient") as MockCl:
+         patch("coinlytics.CoinGeckoClient") as MockCl:
         client = MockCl.return_value
         client.prices.return_value = mock_book
         client.sparkline.return_value = [1.0, 2.0, 3.0, 4.0, 3.5, 5.0, 6.0]
@@ -480,7 +480,7 @@ def test_run_prices_empty_ledger_shows_demo_table(tmp_path, capsys, monkeypatch)
     mock_book.quotes = {}
     mock_book.sparklines = {}
 
-    with patch("cryptolytics.CoinGeckoClient") as MockCl:
+    with patch("coinlytics.CoinGeckoClient") as MockCl:
         MockCl.return_value.prices.return_value = mock_book
         # Should not crash/exit even with no ledger:
         try:
@@ -510,7 +510,7 @@ def test_run_prices_stale_book_prints_notice(tmp_path, capsys, monkeypatch):
     mock_book.sparklines = {}
 
     with patch("coinbasis.Portfolio.from_transactions", return_value=mock_portfolio), \
-         patch("cryptolytics.CoinGeckoClient") as MockCl:
+         patch("coinlytics.CoinGeckoClient") as MockCl:
         MockCl.return_value.prices.return_value = mock_book
         cpt.cli(["--data-dir", str(tmp_path), "prices"])
 
@@ -540,7 +540,7 @@ def test_run_holdings_renders_table(tmp_path, capsys, monkeypatch):
     mock_book.stale = False
 
     with patch("coinbasis.Portfolio.from_transactions", return_value=mock_portfolio), \
-         patch("cryptolytics.CoinGeckoClient") as MockCl:
+         patch("coinlytics.CoinGeckoClient") as MockCl:
         MockCl.return_value.prices.return_value = mock_book
         cpt.cli(["--data-dir", str(tmp_path), "holdings"])
 
@@ -571,7 +571,7 @@ def test_run_holdings_wallet_filter(tmp_path, capsys, monkeypatch):
     mock_book.stale = False
 
     with patch("coinbasis.Portfolio.from_transactions", return_value=mock_portfolio), \
-         patch("cryptolytics.CoinGeckoClient") as MockCl:
+         patch("coinlytics.CoinGeckoClient") as MockCl:
         MockCl.return_value.prices.return_value = mock_book
         cpt.cli(["--data-dir", str(tmp_path), "holdings", "--wallet", "cold"])
 
@@ -592,8 +592,8 @@ def test_run_holdings_specific_method_exits(tmp_path, capsys, monkeypatch):
     mock_portfolio.holdings.side_effect = coinbasis.SelectionRequired()
 
     with patch("coinbasis.Portfolio.from_transactions", return_value=mock_portfolio), \
-         patch("cryptolytics.CoinGeckoClient"), \
-         patch("coinbasis.serde.lot_selection_from_json", return_value={}):
+         patch("coinlytics.CoinGeckoClient"), \
+         patch("coinbasis.serialization.lot_selection_from_json", return_value={}):
         with pytest.raises(SystemExit) as exc_info:
             cpt.cli(["--data-dir", str(tmp_path),
                      "holdings", "--method", "specific", "--select", str(sel_path)])
@@ -633,7 +633,7 @@ def test_run_valuation_renders_headline(tmp_path, capsys, monkeypatch):
     mock_book.stale = False
 
     with patch("coinbasis.Portfolio.from_transactions", return_value=mock_portfolio), \
-         patch("cryptolytics.CoinGeckoClient") as MockCl:
+         patch("coinlytics.CoinGeckoClient") as MockCl:
         MockCl.return_value.prices.return_value = mock_book
         cpt.cli(["--data-dir", str(tmp_path), "valuation"])
 
@@ -667,15 +667,15 @@ def test_run_performance_builds_snapshot(tmp_path, capsys, monkeypatch):
     mock_book.stale = False
 
     with patch("coinbasis.Portfolio.from_transactions", return_value=mock_portfolio), \
-         patch("cryptolytics.CoinGeckoClient") as MockCl, \
-         patch("cryptolytics.perf.build_snapshot") as mock_build_snap, \
-         patch("cryptolytics.perf.dedup_append") as mock_dedup, \
-         patch("cryptolytics.perf.metrics") as mock_metrics:
+         patch("coinlytics.CoinGeckoClient") as MockCl, \
+         patch("coinlytics.perf.build_snapshot") as mock_build_snap, \
+         patch("coinlytics.perf.dedup_append") as mock_dedup, \
+         patch("coinlytics.perf.metrics") as mock_metrics:
         MockCl.return_value.prices.return_value = mock_book
-        mock_snap = cryptolytics.Snapshot("2024-01-01", 0.0, 0.0, 0.0)
+        mock_snap = coinlytics.Snapshot("2024-01-01", 0.0, 0.0, 0.0)
         mock_build_snap.return_value = mock_snap
         mock_dedup.return_value = [mock_snap]
-        mock_metrics.return_value = cryptolytics.PerfMetrics(
+        mock_metrics.return_value = coinlytics.PerfMetrics(
             volatility=None, sharpe=None, max_drawdown=None,
             cumulative_return=None, period_returns=[])
         cpt.cli(["--data-dir", str(tmp_path), "performance"])
@@ -713,8 +713,8 @@ def test_tax_method_specific_routes_to_with_selection(tmp_path, capsys, monkeypa
         Decimal("0"), Decimal("0"), Decimal("0"), Decimal("0"), Decimal("0"))
 
     with patch("coinbasis.Portfolio.from_transactions", return_value=mock_portfolio), \
-         patch("cryptolytics.CoinGeckoClient") as MockCl, \
-         patch("coinbasis.serde.lot_selection_from_json", return_value={}):
+         patch("coinlytics.CoinGeckoClient") as MockCl, \
+         patch("coinbasis.serialization.lot_selection_from_json", return_value={}):
         MockCl.return_value.prices.return_value = MagicMock(
             prices_map=lambda: {}, stale=False)
         cpt.cli([
@@ -756,8 +756,8 @@ def test_rate_limited_no_cache_exits_1(tmp_path, capsys, monkeypatch):
     ]
 
     with patch("coinbasis.Portfolio.from_transactions", return_value=mock_portfolio), \
-         patch("cryptolytics.CoinGeckoClient") as MockCl:
-        MockCl.return_value.prices.side_effect = cryptolytics.RateLimitedError(
+         patch("coinlytics.CoinGeckoClient") as MockCl:
+        MockCl.return_value.prices.side_effect = coinlytics.RateLimitedError(
             "rate limited", url="https://api.coingecko.com", status=429)
         with pytest.raises(SystemExit) as exc_info:
             cpt.cli(["--data-dir", str(tmp_path), "prices"])
@@ -781,7 +781,7 @@ def test_insufficient_lots_exits_1(tmp_path, capsys, monkeypatch):
     )
 
     with patch("coinbasis.Portfolio.from_transactions", return_value=mock_portfolio), \
-         patch("cryptolytics.CoinGeckoClient"):
+         patch("coinlytics.CoinGeckoClient"):
         with pytest.raises(SystemExit) as exc_info:
             cpt.cli(["--data-dir", str(tmp_path), "holdings"])
 
@@ -819,7 +819,7 @@ def test_offline_stale_prices_exit_0(tmp_path, capsys, monkeypatch):
     mock_book.sparklines = {}
 
     with patch("coinbasis.Portfolio.from_transactions", return_value=mock_portfolio), \
-         patch("cryptolytics.CoinGeckoClient") as MockCl:
+         patch("coinlytics.CoinGeckoClient") as MockCl:
         MockCl.return_value.prices.return_value = mock_book
         cpt.cli(["--data-dir", str(tmp_path), "prices", "--offline"])
 

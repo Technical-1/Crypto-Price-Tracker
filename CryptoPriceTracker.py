@@ -1,4 +1,4 @@
-"""Crypto-Price-Tracker — thin orchestrator over coinbasis + cryptolytics."""
+"""Crypto-Price-Tracker — thin orchestrator over coinbasis + coinlytics."""
 from __future__ import annotations
 
 import argparse
@@ -7,7 +7,7 @@ import sys
 from typing import Optional
 
 import coinbasis
-import cryptolytics
+import coinlytics
 
 import appio
 import appconfig
@@ -52,7 +52,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     main = argparse.ArgumentParser(
         prog="crypto-price-tracker",
-        description="Crypto portfolio tracker (coinbasis + cryptolytics)",
+        description="Crypto portfolio tracker (coinbasis + coinlytics)",
     )
     main.add_argument("--data-dir", metavar="DIR", default=None,
                       help="Data directory (default: CWD; env: CPT_DATA_DIR)")
@@ -169,7 +169,7 @@ def _dispatch(cmd: Optional[str], ctx: appconfig.AppContext,
               args: argparse.Namespace) -> None:
     """Call the appropriate run_* function with a single typed-error catch site.
 
-    Maps coinbasis/cryptolytics typed errors to the CLI UX (stderr + exit code)
+    Maps coinbasis/coinlytics typed errors to the CLI UX (stderr + exit code)
     so no unhandled exception escapes to the user.
     """
     try:
@@ -204,7 +204,7 @@ def _dispatch(cmd: Optional[str], ctx: appconfig.AppContext,
     except coinbasis.PortfolioError as exc:
         print(f"Portfolio error: {exc}", file=sys.stderr)
         sys.exit(1)
-    except cryptolytics.RateLimitedError as exc:
+    except coinlytics.RateLimitedError as exc:
         retry_msg = (f"; retry after {exc.retry_after}s"
                      if getattr(exc, "retry_after", None) else "")
         print(
@@ -212,15 +212,15 @@ def _dispatch(cmd: Optional[str], ctx: appconfig.AppContext,
             file=sys.stderr,
         )
         sys.exit(1)
-    except cryptolytics.PriceSourceError as exc:
+    except coinlytics.PriceSourceError as exc:
         print(f"Failed to fetch prices from CoinGecko: {exc}", file=sys.stderr)
         sys.exit(1)
-    except cryptolytics.StakingError as exc:
+    except coinlytics.StakingError as exc:
         print(f"(staking APY API unavailable, falling back to manual: {exc})",
               file=sys.stderr)
-    except cryptolytics.FeedError as exc:
+    except coinlytics.FeedError as exc:
         print(f"(skipped feed: {exc})", file=sys.stderr)
-    except cryptolytics.CryptolyticsError as exc:
+    except coinlytics.CryptolyticsError as exc:
         print(f"Data error: {exc}", file=sys.stderr)
         sys.exit(1)
 
@@ -260,11 +260,11 @@ def run_prices(ctx: appconfig.AppContext, args: argparse.Namespace) -> None:
         sys.exit(1)
 
     asset_ids = list({h.asset for h in holdings_list})
-    client = cryptolytics.CoinGeckoClient(ctx.cg_config)
+    client = coinlytics.CoinGeckoClient(ctx.cg_config)
 
     try:
         book = client.prices(asset_ids)
-    except cryptolytics.RateLimitedError as exc:
+    except coinlytics.RateLimitedError as exc:
         retry_msg = (f"; retry after {exc.retry_after}s" if getattr(exc, "retry_after", None)
                      else "")
         print(
@@ -272,7 +272,7 @@ def run_prices(ctx: appconfig.AppContext, args: argparse.Namespace) -> None:
             file=sys.stderr,
         )
         sys.exit(1)
-    except cryptolytics.PriceSourceError as exc:
+    except coinlytics.PriceSourceError as exc:
         print(f"Failed to fetch prices from CoinGecko: {exc}", file=sys.stderr)
         sys.exit(1)
 
@@ -284,7 +284,7 @@ def run_prices(ctx: appconfig.AppContext, args: argparse.Namespace) -> None:
         for coin in asset_ids:
             try:
                 sparklines[coin] = client.sparkline(coin, days=7)
-            except cryptolytics.CryptolyticsError:
+            except coinlytics.CryptolyticsError:
                 # Best-effort: a missing sparkline shouldn't fail the prices view.
                 continue
 
@@ -295,10 +295,10 @@ def run_prices(ctx: appconfig.AppContext, args: argparse.Namespace) -> None:
 def _run_prices_demo(ctx: appconfig.AppContext, sparkline_flag: bool) -> None:
     """Fallback demo view using originalHoldings (preserves V1 no-arg UX)."""
     demo_ids = list(originalHoldings.keys())
-    client = cryptolytics.CoinGeckoClient(ctx.cg_config)
+    client = coinlytics.CoinGeckoClient(ctx.cg_config)
     try:
         book = client.prices(demo_ids)
-    except cryptolytics.CryptolyticsError as exc:
+    except coinlytics.CryptolyticsError as exc:
         print(f"Failed to fetch prices: {exc}", file=sys.stderr)
         sys.exit(1)
 
@@ -345,7 +345,7 @@ def run_holdings(ctx: appconfig.AppContext, args: argparse.Namespace) -> None:
         holdings_list = [h for h in holdings_list if h.wallet == wallet_filter]
 
     # Optional price valuation
-    client = cryptolytics.CoinGeckoClient(ctx.cg_config)
+    client = coinlytics.CoinGeckoClient(ctx.cg_config)
     prices_map: dict = {}
     try:
         asset_ids = list({h.asset for h in holdings_list})
@@ -355,7 +355,7 @@ def run_holdings(ctx: appconfig.AppContext, args: argparse.Namespace) -> None:
             if book.stale:
                 print("(showing last-good prices; offline/over rate limit)",
                       file=sys.stderr)
-    except cryptolytics.CryptolyticsError as exc:
+    except coinlytics.CryptolyticsError as exc:
         print(f"(could not fetch prices for valuation: {exc})", file=sys.stderr)
 
     print(report.format_holdings(holdings_list, prices_map, group))
@@ -382,13 +382,13 @@ def run_valuation(ctx: appconfig.AppContext, args: argparse.Namespace) -> None:
         holdings_list = [h for h in holdings_list if h.wallet == wallet_filter]
 
     asset_ids = list({h.asset for h in holdings_list})
-    client = cryptolytics.CoinGeckoClient(ctx.cg_config)
+    client = coinlytics.CoinGeckoClient(ctx.cg_config)
     try:
         book = client.prices(asset_ids)
-    except cryptolytics.RateLimitedError:
+    except coinlytics.RateLimitedError:
         print("Rate limited by CoinGecko and no cached prices available.", file=sys.stderr)
         sys.exit(1)
-    except cryptolytics.PriceSourceError as exc:
+    except coinlytics.PriceSourceError as exc:
         print(f"Failed to fetch prices: {exc}", file=sys.stderr)
         sys.exit(1)
 
@@ -437,11 +437,11 @@ def run_tax(ctx: appconfig.AppContext, args: argparse.Namespace) -> None:
     try:
         holdings_list = portfolio.holdings(ctx.method)
         asset_ids = list({h.asset for h in holdings_list})
-        client = cryptolytics.CoinGeckoClient(ctx.cg_config)
+        client = coinlytics.CoinGeckoClient(ctx.cg_config)
         book = client.prices(asset_ids) if asset_ids else None
         prices_map = book.prices_map() if book is not None else {}
         valuation = portfolio.valuation(ctx.method, prices_map)
-    except (cryptolytics.CryptolyticsError, coinbasis.PortfolioError) as exc:
+    except (coinlytics.CryptolyticsError, coinbasis.PortfolioError) as exc:
         print(f"(failed to fetch prices for unrealized P/L: {exc})", file=sys.stderr)
 
     # Tax estimate (only when a year is given)
@@ -478,7 +478,7 @@ def run_rebalance(ctx: appconfig.AppContext, args: argparse.Namespace) -> None:
                             no_migrate=getattr(args, "no_migrate", False))
     portfolio = coinbasis.Portfolio.from_transactions(txs)
 
-    client = cryptolytics.CoinGeckoClient(ctx.cg_config)
+    client = coinlytics.CoinGeckoClient(ctx.cg_config)
 
     holdings_list = portfolio.holdings(ctx.method)
     coins = list({h.asset for h in holdings_list})
@@ -487,10 +487,10 @@ def run_rebalance(ctx: appconfig.AppContext, args: argparse.Namespace) -> None:
         if coins:
             book = client.prices(coins)
         else:
-            book = cryptolytics.PriceBook(
+            book = coinlytics.PriceBook(
                 quotes={}, fetched_at=datetime.now(timezone.utc),
                 stale=False, sparklines={})
-    except cryptolytics.CryptolyticsError as exc:
+    except coinlytics.CryptolyticsError as exc:
         print(f"Failed to fetch prices: {exc}", file=sys.stderr)
         sys.exit(1)
 
@@ -505,7 +505,7 @@ def run_rebalance(ctx: appconfig.AppContext, args: argparse.Namespace) -> None:
     if strategy == "marketcap" and coins:
         try:
             market_caps = client.market_caps(coins)
-        except cryptolytics.CryptolyticsError:
+        except coinlytics.CryptolyticsError:
             print("(market cap fetch failed; falling back to equal weights)",
                   file=sys.stderr)
             strategy = "equal"
@@ -517,15 +517,15 @@ def run_rebalance(ctx: appconfig.AppContext, args: argparse.Namespace) -> None:
             print("No targets.json found. Create one or use --strategy equal/marketcap.",
                   file=sys.stderr)
             sys.exit(1)
-        weights = cryptolytics.rebalance.target_weights(
+        weights = coinlytics.rebalance.target_weights(
             strategy, coins, market_caps=market_caps or None, custom=custom)
     except ValueError as exc:
         print(f"Rebalance error: {exc}", file=sys.stderr)
         sys.exit(1)
 
-    reb_strategy = (cryptolytics.RebalanceStrategy.FULL if full
-                    else cryptolytics.RebalanceStrategy.BAND)
-    plan = cryptolytics.rebalance.compute_trades(
+    reb_strategy = (coinlytics.RebalanceStrategy.FULL if full
+                    else coinlytics.RebalanceStrategy.BAND)
+    plan = coinlytics.rebalance.compute_trades(
         current_values, weights, prices_map,
         strategy=reb_strategy, band=band,
         portfolio=portfolio, method_for_value=coinbasis.CostBasisMethod.HIFO,
@@ -535,7 +535,7 @@ def run_rebalance(ctx: appconfig.AppContext, args: argparse.Namespace) -> None:
     for coin in coins:
         try:
             client.history(coin, days)
-        except cryptolytics.CryptolyticsError:
+        except coinlytics.CryptolyticsError:
             print(f"(skipped history for {coin})", file=sys.stderr)
 
     print(rebalance_report.format_allocation(plan))
@@ -552,7 +552,7 @@ def run_performance(ctx: appconfig.AppContext, args: argparse.Namespace) -> None
                             no_migrate=getattr(args, "no_migrate", False))
     portfolio = coinbasis.Portfolio.from_transactions(txs) if txs is not None else None
 
-    client = cryptolytics.CoinGeckoClient(ctx.cg_config)
+    client = coinlytics.CoinGeckoClient(ctx.cg_config)
 
     # Get current valuation
     prices_map: dict = {}
@@ -565,7 +565,7 @@ def run_performance(ctx: appconfig.AppContext, args: argparse.Namespace) -> None
                 if book.stale:
                     print("(showing last-good prices)", file=sys.stderr)
                 prices_map = book.prices_map()
-        except cryptolytics.CryptolyticsError as exc:
+        except coinlytics.CryptolyticsError as exc:
             print(f"(price fetch failed: {exc})", file=sys.stderr)
 
     if portfolio and prices_map:
@@ -580,17 +580,17 @@ def run_performance(ctx: appconfig.AppContext, args: argparse.Namespace) -> None
 
     # Build today's snapshot
     if valuation is not None:
-        snap = cryptolytics.perf.build_snapshot(valuation, today_str)
+        snap = coinlytics.perf.build_snapshot(valuation, today_str)
     else:
-        snap = cryptolytics.Snapshot(date=today_str, total_value=0.0, cost=0.0, pl=0.0)
+        snap = coinlytics.Snapshot(date=today_str, total_value=0.0, cost=0.0, pl=0.0)
 
     # Load history, dedup-append, save
     history = appio.load_snapshots(ctx.paths["snapshots"])
-    updated_history = cryptolytics.perf.dedup_append(history, snap)
+    updated_history = coinlytics.perf.dedup_append(history, snap)
     appio.save_snapshots(ctx.paths["snapshots"], updated_history)
 
     # Compute metrics
-    metrics = cryptolytics.perf.metrics(updated_history, risk_free=risk_free)
+    metrics = coinlytics.perf.metrics(updated_history, risk_free=risk_free)
     print(perf_report.format_performance(updated_history, metrics))
 
 
@@ -605,14 +605,14 @@ def run_staking(ctx: appconfig.AppContext, args: argparse.Namespace) -> None:
 
     symbols = [v.get("symbol", k) for k, v in config.items()]
     try:
-        api_apys = cryptolytics.fetch_apys(symbols)
-    except cryptolytics.StakingError as exc:
+        api_apys = coinlytics.fetch_apys(symbols)
+    except coinlytics.StakingError as exc:
         print(f"(staking APY API unavailable, falling back to manual: {exc})",
               file=sys.stderr)
         api_apys = {}
 
-    eff = cryptolytics.effective_apys(config, api_apys)
-    rewards_sum = cryptolytics.rewards_summary(rewards)
+    eff = coinlytics.effective_apys(config, api_apys)
+    rewards_sum = coinlytics.rewards_summary(rewards)
     print(staking_report.format_staking(eff, rewards_sum, config))
 
 
@@ -629,21 +629,21 @@ def run_news(ctx: appconfig.AppContext, args: argparse.Namespace) -> None:
         currencies = [coin_filter] if coin_filter else list(
             news_cfg.get("keywords", {}).keys())[:5]
         try:
-            all_items += cryptolytics.fetch_cryptopanic(token, currencies)
-        except cryptolytics.FeedError as exc:
+            all_items += coinlytics.fetch_cryptopanic(token, currencies)
+        except coinlytics.FeedError as exc:
             print(f"(skipped CryptoPanic: {exc})", file=sys.stderr)
 
-    for feed_url in news_cfg.get("feeds", cryptolytics.DEFAULT_FEEDS):
+    for feed_url in news_cfg.get("feeds", coinlytics.DEFAULT_FEEDS):
         try:
-            all_items += cryptolytics.fetch_rss(feed_url)
-        except cryptolytics.FeedError as exc:
+            all_items += coinlytics.fetch_rss(feed_url)
+        except coinlytics.FeedError as exc:
             print(f"(skipped feed {feed_url}: {exc})", file=sys.stderr)
 
     keywords_cfg = news_cfg.get("keywords", {})
     coins_to_show = [coin_filter] if coin_filter else (list(keywords_cfg.keys())[:5] or ["bitcoin"])
     for coin in coins_to_show:
-        keywords = cryptolytics.keywords_for(coin, keywords_cfg)
-        items = cryptolytics.filter_items(all_items, keywords)[:limit]
+        keywords = coinlytics.keywords_for(coin, keywords_cfg)
+        items = coinlytics.filter_items(all_items, keywords)[:limit]
         print(news_report.format_coin_news(coin, items))
 
 
@@ -662,14 +662,14 @@ def run_history(ctx: appconfig.AppContext, args: argparse.Namespace) -> None:
     holdings_list = portfolio.holdings(ctx.method)
     coins = list({h.asset for h in holdings_list})
 
-    client = cryptolytics.CoinGeckoClient(ctx.cg_config)
+    client = coinlytics.CoinGeckoClient(ctx.cg_config)
 
     price_by_coin_date: dict[str, dict[str, float]] = {}
     for coin in coins:
         try:
             hist = client.history(coin, days)
             price_by_coin_date[coin] = {pt.date: float(pt.price) for pt in hist}
-        except cryptolytics.CryptolyticsError as exc:
+        except coinlytics.CryptolyticsError as exc:
             print(f"(skipped history for {coin}: {exc})", file=sys.stderr)
 
     today = _dt.date.today()
@@ -678,7 +678,7 @@ def run_history(ctx: appconfig.AppContext, args: argparse.Namespace) -> None:
 
     # Single-date snapshot detail
     if date_filter:
-        snap_holdings = cryptolytics.history.holdings_as_of(txs, date_filter, ctx.method)
+        snap_holdings = coinlytics.history.holdings_as_of(txs, date_filter, ctx.method)
         snap_rows = []
         total_value = 0.0
         total_cost = 0.0
@@ -693,7 +693,7 @@ def run_history(ctx: appconfig.AppContext, args: argparse.Namespace) -> None:
                 "coin": h.asset, "qty": qty, "price": day_price,
                 "value": val, "pl": val - cost,
             })
-        snap = cryptolytics.Snapshot(
+        snap = coinlytics.Snapshot(
             date=date_filter,
             total_value=total_value,
             cost=total_cost,
@@ -702,7 +702,7 @@ def run_history(ctx: appconfig.AppContext, args: argparse.Namespace) -> None:
         print(history_report.format_snapshot(snap, snap_rows))
         return
 
-    series = cryptolytics.history.reconstruct_series(
+    series = coinlytics.history.reconstruct_series(
         txs, price_by_coin_date, dates, ctx.method)
 
     # News markers (best-effort)
@@ -710,12 +710,12 @@ def run_history(ctx: appconfig.AppContext, args: argparse.Namespace) -> None:
     news_markers: dict[str, str] = {}
     for feed_url in news_cfg.get("feeds", [])[:1]:
         try:
-            items = cryptolytics.fetch_rss(feed_url)
+            items = coinlytics.fetch_rss(feed_url)
             for it in items:
                 pub = it.get("published", "")
                 if pub and dates and pub >= dates[0]:
                     news_markers[pub] = it.get("title", "")[:50]
-        except cryptolytics.FeedError:
+        except coinlytics.FeedError:
             pass
 
     if play:
@@ -726,14 +726,14 @@ def run_history(ctx: appconfig.AppContext, args: argparse.Namespace) -> None:
     # Append today's snapshot
     today_pt = next((pt for pt in reversed(series) if pt["date"] == today_str), None)
     if today_pt:
-        snap = cryptolytics.Snapshot(
+        snap = coinlytics.Snapshot(
             date=today_str,
             total_value=today_pt["value"],
             cost=today_pt["cost"],
             pl=today_pt["pl"],
         )
         loaded = appio.load_snapshots(ctx.paths["snapshots"])
-        updated = cryptolytics.dedup_append(loaded, snap)
+        updated = coinlytics.dedup_append(loaded, snap)
         appio.save_snapshots(ctx.paths["snapshots"], updated)
 
 

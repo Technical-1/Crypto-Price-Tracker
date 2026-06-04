@@ -1,9 +1,9 @@
 # news_report.py
-import cryptolytics.news as _cn
+import coinlytics.news as _cn
 
 
 def format_coin_news(coin: str, items: list) -> str:
-    """Format news items for a single coin using cryptolytics sentiment."""
+    """Format news items for a single coin using coinlytics sentiment."""
     sentiment = _cn.sentiment_summary(items)
     lines = [
         f"News: {coin}  [{len(items)} items]  "

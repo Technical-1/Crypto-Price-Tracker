@@ -15,8 +15,8 @@ from typing import Optional
 import csv as _csv
 
 import coinbasis
-import coinbasis.serde as _serde
-import cryptolytics as _cl
+import coinbasis.serialization as _serde
+import coinlytics as _cl
 
 DEFAULT_WALLET = "default"
 
@@ -325,7 +325,7 @@ def load_news_config(path: str) -> dict:
 
 
 def load_snapshots(path: str) -> list[_cl.Snapshot]:
-    """Read snapshots.jsonl → list[cryptolytics.Snapshot].  Returns [] if absent."""
+    """Read snapshots.jsonl → list[coinlytics.Snapshot].  Returns [] if absent."""
     if not os.path.exists(path):
         return []
     snaps: list[_cl.Snapshot] = []

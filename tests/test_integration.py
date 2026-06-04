@@ -8,7 +8,7 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 import coinbasis
-import cryptolytics
+import coinlytics
 import appio
 import CryptoPriceTracker as cpt
 
@@ -139,23 +139,23 @@ def test_targets_loads_as_decimal_weights(tmp_path):
 def test_snapshot_append_dedup_round_trip(tmp_path):
     """Append the same snapshot twice → only one stored; new date → two stored."""
     snap_path = str(tmp_path / "snapshots.jsonl")
-    snap1 = cryptolytics.Snapshot(date="2024-01-01", total_value=1000.0, cost=800.0, pl=200.0)
-    snap2 = cryptolytics.Snapshot(date="2024-01-02", total_value=1100.0, cost=800.0, pl=300.0)
-    snap1_updated = cryptolytics.Snapshot(date="2024-01-01", total_value=1050.0, cost=800.0, pl=250.0)
+    snap1 = coinlytics.Snapshot(date="2024-01-01", total_value=1000.0, cost=800.0, pl=200.0)
+    snap2 = coinlytics.Snapshot(date="2024-01-02", total_value=1100.0, cost=800.0, pl=300.0)
+    snap1_updated = coinlytics.Snapshot(date="2024-01-01", total_value=1050.0, cost=800.0, pl=250.0)
 
     # First write
     loaded = appio.load_snapshots(snap_path)  # []
-    updated = cryptolytics.dedup_append(loaded, snap1)
+    updated = coinlytics.dedup_append(loaded, snap1)
     appio.save_snapshots(snap_path, updated)
 
     # Second write same date (should replace)
     loaded2 = appio.load_snapshots(snap_path)
-    updated2 = cryptolytics.dedup_append(loaded2, snap1_updated)
+    updated2 = coinlytics.dedup_append(loaded2, snap1_updated)
     appio.save_snapshots(snap_path, updated2)
 
     # Third write new date
     loaded3 = appio.load_snapshots(snap_path)
-    updated3 = cryptolytics.dedup_append(loaded3, snap2)
+    updated3 = coinlytics.dedup_append(loaded3, snap2)
     appio.save_snapshots(snap_path, updated3)
 
     final = appio.load_snapshots(snap_path)
@@ -199,7 +199,7 @@ def test_prices_command_full_pipeline(tmp_path, capsys, monkeypatch,
     mock_portfolio.valuation.return_value = mock_valuation
 
     with patch("coinbasis.Portfolio.from_transactions", return_value=mock_portfolio), \
-         patch("cryptolytics.CoinGeckoClient", return_value=mock_client):
+         patch("coinlytics.CoinGeckoClient", return_value=mock_client):
         cpt.cli(["--data-dir", str(tmp_path), "prices"])
 
     out = capsys.readouterr().out
@@ -224,7 +224,7 @@ def test_holdings_command_full_pipeline(tmp_path, capsys, monkeypatch,
     ]
 
     with patch("coinbasis.Portfolio.from_transactions", return_value=mock_portfolio), \
-         patch("cryptolytics.CoinGeckoClient", return_value=mock_client):
+         patch("coinlytics.CoinGeckoClient", return_value=mock_client):
         cpt.cli(["--data-dir", str(tmp_path), "holdings"])
 
     out = capsys.readouterr().out
@@ -260,7 +260,7 @@ def test_valuation_command_full_pipeline(tmp_path, capsys, monkeypatch,
     mock_portfolio.valuation.return_value = mock_valuation
 
     with patch("coinbasis.Portfolio.from_transactions", return_value=mock_portfolio), \
-         patch("cryptolytics.CoinGeckoClient", return_value=mock_client):
+         patch("coinlytics.CoinGeckoClient", return_value=mock_client):
         cpt.cli(["--data-dir", str(tmp_path), "valuation"])
 
     out = capsys.readouterr().out
@@ -280,7 +280,7 @@ def test_performance_command_full_pipeline(tmp_path, capsys, monkeypatch,
         total_unrealized=Decimal("0"), total_return=Decimal("0"), missing_prices=[])
 
     with patch("coinbasis.Portfolio.from_transactions", return_value=mock_portfolio), \
-         patch("cryptolytics.CoinGeckoClient", return_value=mock_client):
+         patch("coinlytics.CoinGeckoClient", return_value=mock_client):
         cpt.cli(["--data-dir", str(tmp_path), "performance"])
 
     out = capsys.readouterr().out
@@ -303,7 +303,7 @@ def test_price_source_error_no_cache_exits_1(tmp_path, capsys, monkeypatch,
     ]
 
     with patch("coinbasis.Portfolio.from_transactions", return_value=mock_portfolio), \
-         patch("cryptolytics.CoinGeckoClient", return_value=failing_mock_client):
+         patch("coinlytics.CoinGeckoClient", return_value=failing_mock_client):
         with pytest.raises(SystemExit) as exc_info:
             cpt.cli(["--data-dir", str(tmp_path), "prices"])
 
@@ -330,7 +330,7 @@ def test_stale_book_exits_0(tmp_path, capsys, monkeypatch, tmp_ledger):
     mock_book.sparklines = {}
 
     with patch("coinbasis.Portfolio.from_transactions", return_value=mock_portfolio), \
-         patch("cryptolytics.CoinGeckoClient") as MockCl:
+         patch("coinlytics.CoinGeckoClient") as MockCl:
         MockCl.return_value.prices.return_value = mock_book
         # Should NOT raise SystemExit
         cpt.cli(["--data-dir", str(tmp_path), "prices"])
@@ -349,8 +349,8 @@ def test_selection_required_exits_1_for_holdings(tmp_path, capsys, monkeypatch, 
     mock_portfolio.holdings.side_effect = coinbasis.SelectionRequired()
 
     with patch("coinbasis.Portfolio.from_transactions", return_value=mock_portfolio), \
-         patch("cryptolytics.CoinGeckoClient"), \
-         patch("coinbasis.serde.lot_selection_from_json", return_value={}):
+         patch("coinlytics.CoinGeckoClient"), \
+         patch("coinbasis.serialization.lot_selection_from_json", return_value={}):
         with pytest.raises(SystemExit) as exc_info:
             cpt.cli(["--data-dir", str(tmp_path),
                      "holdings", "--method", "specific", "--select", str(sel_path)])
@@ -367,9 +367,9 @@ def test_news_all_feeds_failed_exits_1(tmp_path, capsys, monkeypatch):
     with open(news_path, "w") as f:
         json.dump({"feeds": ["http://bad.feed.example.com/rss"]}, f)
 
-    with patch("cryptolytics.fetch_rss",
-               side_effect=cryptolytics.FeedError("failed")), \
-         patch("cryptolytics.fetch_cryptopanic", return_value=[]):
+    with patch("coinlytics.fetch_rss",
+               side_effect=coinlytics.FeedError("failed")), \
+         patch("coinlytics.fetch_cryptopanic", return_value=[]):
         # news with no items from any feed → no crash, but may print empty
         # (exit 1 only if ALL feeds fail AND no results; see spec)
         try:

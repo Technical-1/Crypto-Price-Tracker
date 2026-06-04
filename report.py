@@ -1,7 +1,7 @@
 # report.py
 from decimal import Decimal
 import coinbasis
-import cryptolytics
+import coinlytics
 import chart as _chart
 
 
@@ -90,7 +90,7 @@ def format_unrealized(portfolio_report: coinbasis.PortfolioReport) -> str:
 
 def format_prices(
     portfolio_report: coinbasis.PortfolioReport,
-    book: "cryptolytics.PriceBook",
+    book: "coinlytics.PriceBook",
     sparklines: dict[str, list[float]] | None = None,
 ) -> str:
     """Prices view: COIN · PRICE · 24H% · 7D% · HELD · COST · VALUE · PROFIT · ALLOC%."""

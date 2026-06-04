@@ -11,8 +11,8 @@ from dataclasses import dataclass
 from typing import Optional
 
 import coinbasis
-import coinbasis.serde as _serde
-import cryptolytics
+import coinbasis.serialization as _serde
+import coinlytics
 
 # ── Method mapping ────────────────────────────────────────────────────────────
 _METHOD_MAP: dict[str, coinbasis.CostBasisMethod] = {
@@ -27,7 +27,7 @@ _METHOD_MAP: dict[str, coinbasis.CostBasisMethod] = {
 @dataclass(frozen=True)
 class AppContext:
     paths: dict            # {"ledger": str, "taxconfig": str, ...}
-    cg_config: cryptolytics.CoinGeckoConfig
+    cg_config: coinlytics.CoinGeckoConfig
     method: coinbasis.CostBasisMethod   # the resolved cost-basis method (FIFO when specific)
     method_is_specific: bool            # True when --method specific was chosen
     lot_selection: Optional[coinbasis.LotSelection]
@@ -82,7 +82,7 @@ def build_context_from_env(
         # any cache miss surfaces as a stale PriceBook rather than a live fetch.
         cg_kwargs["cache_ttl"] = sys.maxsize
         cg_kwargs["history_cache_ttl"] = sys.maxsize
-    cg_config = cryptolytics.CoinGeckoConfig(**cg_kwargs)
+    cg_config = coinlytics.CoinGeckoConfig(**cg_kwargs)
 
     # Resolve method + selection
     method_lower = method.lower()
