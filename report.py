@@ -1,6 +1,7 @@
 # report.py
 from decimal import Decimal
 import coinbasis
+import cryptolytics
 import chart as _chart
 
 
