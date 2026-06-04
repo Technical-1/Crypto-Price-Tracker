@@ -626,3 +626,56 @@ def test_run_performance_builds_snapshot(tmp_path, capsys, monkeypatch):
     assert "performance" in out.lower() or "history" in out.lower() or out.strip()
     # Check build_snapshot was called
     mock_build_snap.assert_called_once()
+
+
+# ── Task 27: --method specific routing for tax ────────────────────────────────
+
+def test_tax_method_specific_routes_to_with_selection(tmp_path, capsys, monkeypatch):
+    """--method specific --select FILE routes tax to the *_with_selection methods."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("COINGECKO_API_KEY", raising=False)
+    ledger_path = tmp_path / "ledger.json"
+    _write_coinbasis_ledger(ledger_path, [])
+    sel_path = tmp_path / "sel.json"
+    sel_path.write_text("{}")  # empty LotSelection
+
+    mock_portfolio = MagicMock()
+    mock_cg_report = MagicMock()
+    mock_cg_report.rows = []
+    mock_cg_report.short_term_gain = Decimal("0")
+    mock_cg_report.long_term_gain = Decimal("0")
+    mock_cg_report.total_gain = Decimal("0")
+    mock_portfolio.capital_gains_report_with_selection.return_value = mock_cg_report
+    mock_portfolio.income_report.return_value = MagicMock(events=[], total_income=Decimal("0"))
+    mock_portfolio.valuation.return_value = MagicMock(
+        assets=[], total_cost=Decimal("0"), total_value=Decimal("0"),
+        total_unrealized=Decimal("0"), total_return=Decimal("0"), missing_prices=[])
+    mock_portfolio.tax_estimate_with_selection.return_value = coinbasis.TaxEstimate(
+        Decimal("0"), Decimal("0"), Decimal("0"), Decimal("0"), Decimal("0"))
+
+    with patch("coinbasis.Portfolio.from_transactions", return_value=mock_portfolio), \
+         patch("cryptolytics.CoinGeckoClient") as MockCl, \
+         patch("coinbasis.serde.lot_selection_from_json", return_value={}):
+        MockCl.return_value.prices.return_value = MagicMock(
+            prices_map=lambda: {}, stale=False)
+        cpt.cli([
+            "--data-dir", str(tmp_path),
+            "tax", "--method", "specific", "--select", str(sel_path), "--year", "2024"
+        ])
+
+    # Assert *_with_selection was called, not the regular method
+    mock_portfolio.capital_gains_report_with_selection.assert_called_once()
+    mock_portfolio.capital_gains_report.assert_not_called()
+
+
+def test_tax_method_specific_without_select_exits(tmp_path, capsys, monkeypatch):
+    """--method specific without --select exits with code 1."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("COINGECKO_API_KEY", raising=False)
+    _write_coinbasis_ledger(tmp_path / "ledger.json", [])
+
+    with pytest.raises(SystemExit) as exc_info:
+        cpt.cli(["--data-dir", str(tmp_path), "tax", "--method", "specific"])
+    assert exc_info.value.code == 1
+    err = capsys.readouterr().err
+    assert "--select" in err
