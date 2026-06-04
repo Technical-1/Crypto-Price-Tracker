@@ -199,9 +199,9 @@ def format_valuation(portfolio_report: coinbasis.PortfolioReport) -> str:
     """Valuation view: headline totals + per-asset allocation bars."""
     lines = [
         "Portfolio Valuation",
-        f"  Total cost:       ${float(portfolio_report.total_cost):>14,.2f}",
-        f"  Total value:      ${float(portfolio_report.total_value):>14,.2f}",
-        f"  Unrealized P/L:   ${float(portfolio_report.total_unrealized):>+14,.2f}",
+        f"  Total cost:       ${float(portfolio_report.total_cost):>14.2f}",
+        f"  Total value:      ${float(portfolio_report.total_value):>14.2f}",
+        f"  Unrealized P/L:   ${float(portfolio_report.total_unrealized):>+14.2f}",
         f"  Total return:     {float(portfolio_report.total_return)*100:>+.2f}%",
         "",
         "Asset Allocation",
@@ -214,7 +214,7 @@ def format_valuation(portfolio_report: coinbasis.PortfolioReport) -> str:
     for av in portfolio_report.assets:
         alloc = float(av.allocation)
         bar = _chart.hbar(alloc, max_alloc, bar_width)
-        lines.append(f"  {av.asset:<12} {bar} {alloc*100:5.1f}%  ${float(av.market_value):>12,.2f}")
+        lines.append(f"  {av.asset:<12} {bar} {alloc*100:5.1f}%  ${float(av.market_value):>12.2f}")
 
     if portfolio_report.missing_prices:
         lines.append(f"\n  (no price for: {', '.join(portfolio_report.missing_prices)})")

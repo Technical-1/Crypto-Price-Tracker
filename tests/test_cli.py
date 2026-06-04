@@ -541,3 +541,44 @@ def test_run_holdings_specific_method_exits(tmp_path, capsys, monkeypatch):
     assert exc_info.value.code == 1
     err = capsys.readouterr().err
     assert "specific" in err.lower() or "--select" in err
+
+
+# ── Task 25: run_valuation ────────────────────────────────────────────────────
+
+def test_run_valuation_renders_headline(tmp_path, capsys, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("COINGECKO_API_KEY", raising=False)
+    ledger_path = tmp_path / "ledger.json"
+    _write_coinbasis_ledger(ledger_path, [])
+
+    mock_portfolio = MagicMock()
+    mock_portfolio.holdings.return_value = []
+    mock_valuation = MagicMock()
+    mock_valuation.assets = [
+        coinbasis.AssetValuation(
+            asset="bitcoin", quantity=Decimal("1"),
+            cost_basis=Decimal("50000"), price=Decimal("60000"),
+            market_value=Decimal("60000"), unrealized=Decimal("10000"),
+            allocation=Decimal("1"),
+        )
+    ]
+    mock_valuation.total_cost = Decimal("50000")
+    mock_valuation.total_value = Decimal("60000")
+    mock_valuation.total_unrealized = Decimal("10000")
+    mock_valuation.total_return = Decimal("0.2")
+    mock_valuation.missing_prices = []
+    mock_portfolio.valuation.return_value = mock_valuation
+
+    mock_book = MagicMock()
+    mock_book.prices_map.return_value = {"bitcoin": Decimal("60000")}
+    mock_book.stale = False
+
+    with patch("coinbasis.Portfolio.from_transactions", return_value=mock_portfolio), \
+         patch("cryptolytics.CoinGeckoClient") as MockCl:
+        MockCl.return_value.prices.return_value = mock_book
+        cpt.cli(["--data-dir", str(tmp_path), "valuation"])
+
+    out = capsys.readouterr().out
+    assert "bitcoin" in out
+    assert "60000" in out
+    assert "20.00" in out or "20%" in out or "0.2" in out

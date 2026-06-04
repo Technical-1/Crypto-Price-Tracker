@@ -308,7 +308,41 @@ def run_holdings(ctx: appconfig.AppContext, args: argparse.Namespace) -> None:
 
 
 def run_valuation(ctx: appconfig.AppContext, args: argparse.Namespace) -> None:
-    raise NotImplementedError("run_valuation: see plan-04 Task 25")
+    """valuation command: portfolio value + allocation bar chart."""
+    wallet_filter = getattr(args, "wallet", None)
+
+    txs = appio.load_ledger(ctx.paths["ledger"],
+                            no_migrate=getattr(args, "no_migrate", False))
+
+    portfolio = coinbasis.Portfolio.from_transactions(txs)
+    try:
+        holdings_list = portfolio.holdings(ctx.method)
+    except coinbasis.SelectionRequired:
+        print(
+            "--method specific is not supported for valuation; use fifo/lifo/hifo/average.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    if wallet_filter:
+        holdings_list = [h for h in holdings_list if h.wallet == wallet_filter]
+
+    asset_ids = list({h.asset for h in holdings_list})
+    client = cryptolytics.CoinGeckoClient(ctx.cg_config)
+    try:
+        book = client.prices(asset_ids)
+    except cryptolytics.RateLimitedError as exc:
+        print("Rate limited by CoinGecko and no cached prices available.", file=sys.stderr)
+        sys.exit(1)
+    except cryptolytics.PriceSourceError as exc:
+        print(f"Failed to fetch prices: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    if book.stale:
+        print("(showing last-good prices; offline/over rate limit)", file=sys.stderr)
+
+    valuation = portfolio.valuation(ctx.method, book.prices_map())
+    print(report.format_valuation(valuation))
 
 
 def _print_section(title: str, body: str) -> None:
