@@ -215,3 +215,63 @@ def test_format_tax_shows_estimate():
     assert "Short" in out or "short" in out
     assert "Long" in out or "long" in out
     assert "US" in out or config.jurisdiction in out
+
+
+import rebalance_report
+
+
+def _make_plan(in_balance: bool = False) -> cryptolytics.RebalancePlan:
+    from cryptolytics import RebalanceAction, RebalancePlan
+    actions = [
+        RebalanceAction(
+            asset="bitcoin",
+            current_value=Decimal("60000"),
+            target_value=Decimal("50000"),
+            drift=Decimal("10000"),
+            side="sell",
+            amount_usd=Decimal("10000"),
+            coin_amount=Decimal("0.1667"),
+            target_pct=Decimal("50"),
+            tax=None,
+        ),
+        RebalanceAction(
+            asset="ethereum",
+            current_value=Decimal("40000"),
+            target_value=Decimal("50000"),
+            drift=Decimal("-10000"),
+            side="buy",
+            amount_usd=Decimal("10000"),
+            coin_amount=Decimal("2.5"),
+            target_pct=Decimal("50"),
+            tax=None,
+        ),
+    ]
+    return RebalancePlan(
+        actions=actions,
+        total_value=Decimal("100000"),
+        total_buys_usd=Decimal("10000"),
+        total_sells_usd=Decimal("10000"),
+        in_balance=in_balance,
+    )
+
+
+def test_format_trades_shows_side_and_amount():
+    plan = _make_plan()
+    out = rebalance_report.format_trades(plan)
+    assert "sell" in out.lower() or "SELL" in out
+    assert "buy" in out.lower() or "BUY" in out
+    assert "bitcoin" in out
+    assert "10000" in out
+
+
+def test_format_allocation_shows_targets():
+    plan = _make_plan()
+    out = rebalance_report.format_allocation(plan)
+    assert "bitcoin" in out
+    assert "50" in out  # target_pct
+
+
+def test_in_balance_banner():
+    plan_balanced = _make_plan(in_balance=True)
+    out = rebalance_report.format_trades(plan_balanced)
+    assert "balance" in out.lower() or "no trades" in out.lower()
