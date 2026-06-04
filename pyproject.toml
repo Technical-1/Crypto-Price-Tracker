@@ -8,10 +8,29 @@ version = "2.0.0"
 description = "A thin CLI front-end over the coinbasis and coinlytics packages."
 readme = "README.md"
 requires-python = ">=3.10"
+authors = [{name = "Jacob Kanfer"}]
+keywords = ["crypto", "portfolio", "cost-basis", "tax", "cli", "rebalancing"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: End Users/Desktop",
+    "Intended Audience :: Developers",
+    "Environment :: Console",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
 dependencies = [
     "coinbasis>=0.1,<0.2",
     "coinlytics>=0.1,<0.2",
 ]
+
+[project.urls]
+Homepage = "https://github.com/Technical-1/Crypto-Price-Tracker"
+Repository = "https://github.com/Technical-1/Crypto-Price-Tracker"
+Issues = "https://github.com/Technical-1/Crypto-Price-Tracker/issues"
 
 [project.scripts]
 crypto-price-tracker = "CryptoPriceTracker:cli"
