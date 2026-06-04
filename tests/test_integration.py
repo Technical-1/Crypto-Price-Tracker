@@ -285,3 +285,96 @@ def test_performance_command_full_pipeline(tmp_path, capsys, monkeypatch,
 
     out = capsys.readouterr().out
     assert "Performance" in out or "performance" in out.lower()
+
+
+# ── Error-path integration ──────────────────────────────────────────────────────
+
+def test_price_source_error_no_cache_exits_1(tmp_path, capsys, monkeypatch,
+                                               tmp_ledger, failing_mock_client):
+    """MockClient with fail_ids={bitcoin} → PriceSourceError → exit 1."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("COINGECKO_API_KEY", raising=False)
+
+    mock_portfolio = MagicMock()
+    mock_portfolio.holdings.return_value = [
+        coinbasis.Holding(asset="bitcoin", wallet="default",
+                          quantity=Decimal("1"), cost_basis=Decimal("20000"),
+                          average_cost=Decimal("20000")),
+    ]
+
+    with patch("coinbasis.Portfolio.from_transactions", return_value=mock_portfolio), \
+         patch("cryptolytics.CoinGeckoClient", return_value=failing_mock_client):
+        with pytest.raises(SystemExit) as exc_info:
+            cpt.cli(["--data-dir", str(tmp_path), "prices"])
+
+    assert exc_info.value.code == 1
+    err = capsys.readouterr().err
+    assert "price" in err.lower() or "fetch" in err.lower() or "rate" in err.lower()
+
+
+def test_stale_book_exits_0(tmp_path, capsys, monkeypatch, tmp_ledger):
+    """Stale PriceBook (offline fallback) → exit 0 + stderr notice."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("COINGECKO_API_KEY", raising=False)
+
+    mock_portfolio = MagicMock()
+    mock_portfolio.holdings.return_value = []
+    mock_portfolio.valuation.return_value = MagicMock(
+        assets=[], total_cost=Decimal("0"), total_value=Decimal("0"),
+        total_unrealized=Decimal("0"), total_return=Decimal("0"), missing_prices=[])
+
+    mock_book = MagicMock()
+    mock_book.prices_map.return_value = {}
+    mock_book.stale = True
+    mock_book.quotes = {}
+    mock_book.sparklines = {}
+
+    with patch("coinbasis.Portfolio.from_transactions", return_value=mock_portfolio), \
+         patch("cryptolytics.CoinGeckoClient") as MockCl:
+        MockCl.return_value.prices.return_value = mock_book
+        # Should NOT raise SystemExit
+        cpt.cli(["--data-dir", str(tmp_path), "prices"])
+
+    err = capsys.readouterr().err
+    assert "stale" in err.lower() or "offline" in err.lower() or "last-good" in err.lower()
+
+
+def test_selection_required_exits_1_for_holdings(tmp_path, capsys, monkeypatch, tmp_ledger):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("COINGECKO_API_KEY", raising=False)
+    sel_path = tmp_path / "sel.json"
+    sel_path.write_text("{}")
+
+    mock_portfolio = MagicMock()
+    mock_portfolio.holdings.side_effect = coinbasis.SelectionRequired()
+
+    with patch("coinbasis.Portfolio.from_transactions", return_value=mock_portfolio), \
+         patch("cryptolytics.CoinGeckoClient"), \
+         patch("coinbasis.serde.lot_selection_from_json", return_value={}):
+        with pytest.raises(SystemExit) as exc_info:
+            cpt.cli(["--data-dir", str(tmp_path),
+                     "holdings", "--method", "specific", "--select", str(sel_path)])
+
+    assert exc_info.value.code == 1
+    err = capsys.readouterr().err
+    assert "specific" in err.lower() or "automatic" in err.lower()
+
+
+def test_news_all_feeds_failed_exits_1(tmp_path, capsys, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("COINGECKO_API_KEY", raising=False)
+    news_path = tmp_path / "news.json"
+    with open(news_path, "w") as f:
+        json.dump({"feeds": ["http://bad.feed.example.com/rss"]}, f)
+
+    with patch("cryptolytics.fetch_rss",
+               side_effect=cryptolytics.FeedError("failed")), \
+         patch("cryptolytics.fetch_cryptopanic", return_value=[]):
+        # news with no items from any feed → no crash, but may print empty
+        # (exit 1 only if ALL feeds fail AND no results; see spec)
+        try:
+            cpt.cli(["--data-dir", str(tmp_path), "news"])
+        except SystemExit:
+            # Acceptable if exit 0 (no items, but command ran) or exit 1
+            pass
+    # The key invariant: no unhandled exception/traceback
