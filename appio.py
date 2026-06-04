@@ -116,6 +116,56 @@ def _parse_coinbasis_rows(rows: list, path: str) -> list[coinbasis.Transaction]:
     return txs
 
 
+def _utc_midnight(date_str: str) -> datetime:
+    """Parse 'YYYY-MM-DD' → tz-aware UTC midnight datetime."""
+    y, m, d = (int(x) for x in date_str.split("-"))
+    return datetime(y, m, d, tzinfo=timezone.utc)
+
+
+def migrate_v1_ledger(rows: list[dict]) -> list[coinbasis.Transaction]:
+    """Convert a V1 flat ledger array to a list of coinbasis Transactions.
+
+    Maps each V1 row:
+        action == "buy"  → coinbasis.Buy(wallet=DEFAULT_WALLET, ...)
+        action == "sell" → coinbasis.Sell(wallet=DEFAULT_WALLET, ...)
+
+    Numbers go through Decimal(str(x)) for lossless conversion.
+    Invalid rows (validate() failure) are skipped with a stderr notice.
+    """
+    txs: list[coinbasis.Transaction] = []
+    for i, row in enumerate(rows):
+        try:
+            ts = _utc_midnight(row["date"])
+            asset = str(row["coin"])
+            qty = Decimal(str(row["quantity"]))
+            price = Decimal(str(row["price_usd"]))
+            fee = Decimal(str(row["fee_usd"]))
+            action = str(row.get("action", "")).lower()
+
+            if action == "buy":
+                tx: coinbasis.Transaction = coinbasis.Buy(
+                    timestamp=ts, wallet=DEFAULT_WALLET, asset=asset,
+                    quantity=qty, unit_price=price, fee=fee,
+                )
+            elif action == "sell":
+                tx = coinbasis.Sell(
+                    timestamp=ts, wallet=DEFAULT_WALLET, asset=asset,
+                    quantity=qty, unit_price=price, fee=fee,
+                )
+            else:
+                print(
+                    f"(skipped ledger entry {i}: unknown action '{action}')",
+                    file=sys.stderr,
+                )
+                continue
+
+            tx.validate()
+            txs.append(tx)
+        except (coinbasis.PortfolioError, KeyError, ValueError, TypeError) as exc:
+            print(f"(skipped ledger entry {i}: {exc})", file=sys.stderr)
+    return txs
+
+
 def save_ledger(path: str, txs: list[coinbasis.Transaction]) -> None:
     """Atomically overwrite ledger.json with the coinbasis schema."""
     tmp = path + ".tmp"

@@ -71,3 +71,53 @@ def test_load_ledger_missing_file_raises(tmp_path):
     with pytest.raises(SystemExit) as exc_info:
         appio.load_ledger(str(tmp_path / "nofile.json"))
     assert exc_info.value.code == 1
+
+
+def test_migrate_v1_buy_row():
+    rows = [{"date": "2024-01-01", "coin": "bitcoin", "action": "buy",
+             "quantity": 1.0, "price_usd": 50000.0, "fee_usd": 10.0}]
+    txs = appio.migrate_v1_ledger(rows)
+    assert len(txs) == 1
+    tx = txs[0]
+    assert isinstance(tx, coinbasis.Buy)
+    assert tx.wallet == "default"
+    assert tx.asset == "bitcoin"
+    assert tx.quantity == Decimal("1.0")
+    assert tx.unit_price == Decimal("50000.0")
+    assert tx.fee == Decimal("10.0")
+    expected_ts = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    assert tx.timestamp == expected_ts
+
+
+def test_migrate_v1_sell_row():
+    rows = [{"date": "2024-06-01", "coin": "ethereum", "action": "sell",
+             "quantity": 0.5, "price_usd": 3000.0, "fee_usd": 0.0}]
+    txs = appio.migrate_v1_ledger(rows)
+    assert len(txs) == 1
+    assert isinstance(txs[0], coinbasis.Sell)
+    assert txs[0].asset == "ethereum"
+
+
+def test_migrate_v1_invalid_row_skipped():
+    """A row with quantity <= 0 is skipped with a stderr notice (not a crash)."""
+    rows = [
+        {"date": "2024-01-01", "coin": "bitcoin", "action": "buy",
+         "quantity": -1.0, "price_usd": 50000.0, "fee_usd": 0.0},
+        {"date": "2024-01-02", "coin": "bitcoin", "action": "buy",
+         "quantity": 1.0, "price_usd": 50000.0, "fee_usd": 0.0},
+    ]
+    txs = appio.migrate_v1_ledger(rows)
+    assert len(txs) == 1  # bad row skipped
+    assert txs[0].quantity == Decimal("1.0")
+
+
+def test_v1_schema_detection():
+    v1_rows = [{"date": "2024-01-01", "coin": "btc", "action": "buy",
+                "quantity": 1, "price_usd": 100, "fee_usd": 0}]
+    coinbasis_rows = [{"Buy": {"timestamp": "2024-01-01T00:00:00Z",
+                               "wallet": "default", "asset": "btc",
+                               "quantity": "1", "unit_price": "100", "fee": "0"}}]
+    assert appio._is_v1_schema(v1_rows) is True
+    assert appio._is_coinbasis_schema(v1_rows) is False
+    assert appio._is_coinbasis_schema(coinbasis_rows) is True
+    assert appio._is_v1_schema(coinbasis_rows) is False
