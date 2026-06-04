@@ -204,8 +204,69 @@ def run_valuation(ctx: appconfig.AppContext, args: argparse.Namespace) -> None:
     raise NotImplementedError("run_valuation: see plan-04 Task 24")
 
 
+def _print_section(title: str, body: str) -> None:
+    print(f"\n{title}\n{'-' * len(title)}")
+    print(body)
+
+
 def run_tax(ctx: appconfig.AppContext, args: argparse.Namespace) -> None:
-    raise NotImplementedError("run_tax: see plan-03 Task 20")
+    """tax command: realized gains + income + unrealized P/L + tax estimate."""
+    tax_year = getattr(args, "year", None)
+
+    txs = appio.load_ledger(ctx.paths["ledger"],
+                            no_migrate=getattr(args, "no_migrate", False))
+    taxconfig = appio.load_taxconfig(ctx.paths["taxconfig"])
+    portfolio = coinbasis.Portfolio.from_transactions(txs)
+
+    # Realized gains
+    try:
+        if ctx.method_is_specific and ctx.lot_selection is not None:
+            if tax_year:
+                cg = portfolio.capital_gains_report_with_selection(
+                    ctx.lot_selection, tax_year)
+                realized = cg.rows
+            else:
+                realized = portfolio.realized_gains_with_selection(ctx.lot_selection)
+        else:
+            if tax_year:
+                cg = portfolio.capital_gains_report(ctx.method, tax_year)
+                realized = cg.rows
+            else:
+                realized = portfolio.realized_gains(ctx.method)
+    except coinbasis.PortfolioError as exc:
+        print(f"Portfolio error: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    # Unrealized P/L (requires prices; best-effort)
+    valuation = None
+    try:
+        holdings_list = portfolio.holdings(ctx.method)
+        asset_ids = list({h.asset for h in holdings_list})
+        client = cryptolytics.CoinGeckoClient(ctx.cg_config)
+        book = client.prices(asset_ids) if asset_ids else None
+        prices_map = book.prices_map() if book is not None else {}
+        valuation = portfolio.valuation(ctx.method, prices_map)
+    except (cryptolytics.CryptolyticsError, coinbasis.PortfolioError) as exc:
+        print(f"(failed to fetch prices for unrealized P/L: {exc})", file=sys.stderr)
+
+    # Tax estimate (only when a year is given)
+    est = None
+    if tax_year:
+        try:
+            if ctx.method_is_specific and ctx.lot_selection is not None:
+                est = portfolio.tax_estimate_with_selection(
+                    ctx.lot_selection, tax_year, taxconfig)
+            else:
+                est = portfolio.tax_estimate(ctx.method, tax_year, taxconfig)
+        except coinbasis.PortfolioError:
+            est = None
+
+    # Format + print
+    _print_section("Realized gains", report.format_realized(realized))
+    if valuation is not None:
+        _print_section("Unrealized P/L", report.format_unrealized(valuation))
+    if est is not None:
+        _print_section("Estimated Tax", report.format_tax(est, taxconfig))
 
 
 def run_rebalance(ctx: appconfig.AppContext, args: argparse.Namespace) -> None:
