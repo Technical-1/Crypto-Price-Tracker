@@ -457,3 +457,87 @@ def test_run_prices_stale_book_prints_notice(tmp_path, capsys, monkeypatch):
 
     err = capsys.readouterr().err
     assert "stale" in err.lower() or "offline" in err.lower() or "last-good" in err.lower()
+
+
+# ── Task 24: run_holdings ─────────────────────────────────────────────────────
+
+def test_run_holdings_renders_table(tmp_path, capsys, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("COINGECKO_API_KEY", raising=False)
+    ledger_path = tmp_path / "ledger.json"
+    _write_coinbasis_ledger(ledger_path, [])
+
+    mock_portfolio = MagicMock()
+    mock_portfolio.holdings.return_value = [
+        coinbasis.Holding(
+            asset="bitcoin", wallet="cold",
+            quantity=Decimal("2"), cost_basis=Decimal("100000"),
+            average_cost=Decimal("50000"),
+        )
+    ]
+
+    mock_book = MagicMock()
+    mock_book.prices_map.return_value = {"bitcoin": Decimal("60000")}
+    mock_book.stale = False
+
+    with patch("coinbasis.Portfolio.from_transactions", return_value=mock_portfolio), \
+         patch("cryptolytics.CoinGeckoClient") as MockCl:
+        MockCl.return_value.prices.return_value = mock_book
+        cpt.cli(["--data-dir", str(tmp_path), "holdings"])
+
+    out = capsys.readouterr().out
+    assert "bitcoin" in out
+    assert "2" in out or "2.0" in out
+    assert "50000" in out
+
+
+def test_run_holdings_wallet_filter(tmp_path, capsys, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("COINGECKO_API_KEY", raising=False)
+    ledger_path = tmp_path / "ledger.json"
+    _write_coinbasis_ledger(ledger_path, [])
+
+    mock_portfolio = MagicMock()
+    mock_portfolio.holdings.return_value = [
+        coinbasis.Holding(asset="bitcoin", wallet="cold",
+                          quantity=Decimal("2"), cost_basis=Decimal("100000"),
+                          average_cost=Decimal("50000")),
+        coinbasis.Holding(asset="ethereum", wallet="hot",
+                          quantity=Decimal("5"), cost_basis=Decimal("10000"),
+                          average_cost=Decimal("2000")),
+    ]
+
+    mock_book = MagicMock()
+    mock_book.prices_map.return_value = {}
+    mock_book.stale = False
+
+    with patch("coinbasis.Portfolio.from_transactions", return_value=mock_portfolio), \
+         patch("cryptolytics.CoinGeckoClient") as MockCl:
+        MockCl.return_value.prices.return_value = mock_book
+        cpt.cli(["--data-dir", str(tmp_path), "holdings", "--wallet", "cold"])
+
+    out = capsys.readouterr().out
+    assert "bitcoin" in out
+    assert "ethereum" not in out
+
+
+def test_run_holdings_specific_method_exits(tmp_path, capsys, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("COINGECKO_API_KEY", raising=False)
+    sel_path = tmp_path / "sel.json"
+    sel_path.write_text("{}")
+    ledger_path = tmp_path / "ledger.json"
+    _write_coinbasis_ledger(ledger_path, [])
+
+    mock_portfolio = MagicMock()
+    mock_portfolio.holdings.side_effect = coinbasis.SelectionRequired()
+
+    with patch("coinbasis.Portfolio.from_transactions", return_value=mock_portfolio), \
+         patch("cryptolytics.CoinGeckoClient"), \
+         patch("coinbasis.serde.lot_selection_from_json", return_value={}):
+        with pytest.raises(SystemExit) as exc_info:
+            cpt.cli(["--data-dir", str(tmp_path),
+                     "holdings", "--method", "specific", "--select", str(sel_path)])
+    assert exc_info.value.code == 1
+    err = capsys.readouterr().err
+    assert "specific" in err.lower() or "--select" in err

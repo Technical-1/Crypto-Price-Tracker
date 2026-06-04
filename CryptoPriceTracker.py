@@ -266,7 +266,45 @@ def _run_prices_demo(ctx: appconfig.AppContext, sparkline_flag: bool) -> None:
 
 
 def run_holdings(ctx: appconfig.AppContext, args: argparse.Namespace) -> None:
-    raise NotImplementedError("run_holdings: see plan-04 Task 24")
+    """holdings command: open lots per wallet."""
+    wallet_filter = getattr(args, "wallet", None)
+    group = getattr(args, "group", "asset")
+
+    txs = appio.load_ledger(ctx.paths["ledger"],
+                            no_migrate=getattr(args, "no_migrate", False))
+
+    portfolio = coinbasis.Portfolio.from_transactions(txs)
+
+    try:
+        holdings_list = portfolio.holdings(ctx.method)
+    except coinbasis.SelectionRequired:
+        print(
+            "--method specific is not supported for holdings view; "
+            "use an automatic method (fifo/lifo/hifo/average). "
+            "--method specific is only for tax/realized-gain queries.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    # Wallet filter
+    if wallet_filter:
+        holdings_list = [h for h in holdings_list if h.wallet == wallet_filter]
+
+    # Optional price valuation
+    client = cryptolytics.CoinGeckoClient(ctx.cg_config)
+    prices_map: dict = {}
+    try:
+        asset_ids = list({h.asset for h in holdings_list})
+        if asset_ids:
+            book = client.prices(asset_ids)
+            prices_map = book.prices_map()
+            if book.stale:
+                print("(showing last-good prices; offline/over rate limit)",
+                      file=sys.stderr)
+    except cryptolytics.CryptolyticsError as exc:
+        print(f"(could not fetch prices for valuation: {exc})", file=sys.stderr)
+
+    print(report.format_holdings(holdings_list, prices_map, group))
 
 
 def run_valuation(ctx: appconfig.AppContext, args: argparse.Namespace) -> None:
