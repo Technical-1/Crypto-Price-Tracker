@@ -325,3 +325,37 @@ def test_format_snapshot_from_cryptolytics_snapshot():
     out = history_report.format_snapshot(snap, rows)
     assert "bitcoin" in out
     assert "1200" in out
+
+
+import perf_report
+
+
+def test_format_performance_with_metrics():
+    history = [
+        cryptolytics.Snapshot(date="2024-01-01", total_value=1000.0, cost=800.0, pl=200.0),
+        cryptolytics.Snapshot(date="2024-01-02", total_value=1100.0, cost=800.0, pl=300.0),
+        cryptolytics.Snapshot(date="2024-01-03", total_value=1050.0, cost=800.0, pl=250.0),
+    ]
+    metrics = cryptolytics.PerfMetrics(
+        volatility=0.05,
+        sharpe=1.2,
+        max_drawdown=0.04,
+        cumulative_return=0.05,
+        period_returns=[0.1, -0.045],
+    )
+    out = perf_report.format_performance(history, metrics)
+    assert "volatility" in out.lower() or "Volatility" in out
+    assert "1.2" in out or "sharpe" in out.lower()
+    assert any(c in out for c in ["▁","▂","▃","▄","▅","▆","▇","█", "|"])
+
+
+def test_format_performance_not_enough_history():
+    history = [
+        cryptolytics.Snapshot(date="2024-01-01", total_value=1000.0, cost=800.0, pl=200.0),
+    ]
+    metrics = cryptolytics.PerfMetrics(
+        volatility=None, sharpe=None, max_drawdown=None,
+        cumulative_return=None, period_returns=[],
+    )
+    out = perf_report.format_performance(history, metrics)
+    assert "not enough" in out.lower() or "history" in out.lower()
