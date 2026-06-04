@@ -16,10 +16,15 @@ Coinbase didn't give me a clear overall profit figure for the coins I held, so I
 ## Tech Stack
 
 - **Language**: Python 3
-- **HTTP**: `requests`
-- **Data source**: CoinGecko public REST API
+- **Cost-basis engine**: [`coinbasis`](https://pypi.org/project/coinbasis/) — multi-wallet ledger, lot matching, tax estimation
+- **Market data & analytics**: [`cryptolytics`](https://pypi.org/project/cryptolytics/) — CoinGecko/DefiLlama/RSS access, rebalancing, performance, news
+- **Data source**: CoinGecko public REST API (via `cryptolytics`)
 - **Testing**: `pytest`
-- **Linting**: `pyflakes`
+- **Linting**: `ruff`
+
+This tool is a thin CLI: all business logic lives in the `coinbasis` and `cryptolytics`
+packages. The app only handles argument parsing, file/config I/O (`appio.py`,
+`appconfig.py`), and output formatting (`*_report.py`, `chart.py`).
 
 ## Getting Started
 
@@ -31,8 +36,11 @@ Coinbase didn't give me a clear overall profit figure for the coins I held, so I
 ### Installation
 
 ```bash
-python3 -m pip install -r requirements.txt
+python3 -m pip install coinbasis cryptolytics
 ```
+
+The two packages are the only runtime dependencies (declared in `pyproject.toml`).
+For local development with editable installs, see the **Development** section below.
 
 ### Usage
 
@@ -45,6 +53,72 @@ file is present in the working directory (created by the `import` or `add` subco
 holdings are derived from it automatically. Otherwise the built-in `originalHoldings`
 dictionary is used — edit the `total` and `cost` values there to match your own holdings.
 Add more coins by extending the dictionary and the request URL.
+
+## New Commands (V2 View Parity)
+
+| Command | Description |
+|---|---|
+| `prices [--sparkline]` | Current prices + unrealized P/L (default view) |
+| `holdings [--group {asset,wallet}] [--wallet NAME]` | Open lots per wallet |
+| `valuation` | Portfolio value + allocation bar chart |
+| `performance [--risk-free R]` | Sharpe, drawdown, cumulative return, sparkline |
+| `migrate [--dry-run]` | Explicitly upgrade a V1 ledger to the coinbasis schema |
+
+The existing `tax`, `rebalance`, `staking`, `news`, `history`, `import`, and `add`
+commands remain available.
+
+## Global Flags
+
+These flags are accepted by every data command:
+
+| Flag | Description |
+|---|---|
+| `--method {fifo,lifo,hifo,average,specific}` | Cost-basis lot-matching method (default `fifo`) |
+| `--select FILE` | Lot-selection JSON file (required with `--method specific`) |
+| `--wallet NAME` | Filter output to a single wallet |
+| `--year YYYY` | Calendar-year filter (e.g. `--year 2024`) |
+| `--offline` | Never fetch; use cached prices only |
+| `--data-dir DIR` | Data directory (default: CWD; env: `CPT_DATA_DIR`) |
+
+## CoinGecko API Key
+
+Set `COINGECKO_API_KEY` to use a Demo or Pro API key. The tracker defaults to
+keyless-first (no key required), escalating to the keyed endpoint only when
+rate-limited (HTTP 429):
+
+```bash
+export COINGECKO_API_KEY=your-demo-key
+export COINGECKO_PLAN=demo   # or "pro" for the Pro API
+python3 CryptoPriceTracker.py prices
+```
+
+## Cost-Basis Method
+
+Use `--method` on any command to choose FIFO (default), LIFO, HIFO, Average, or
+Specific-ID:
+
+```bash
+python3 CryptoPriceTracker.py tax --method hifo --year 2024
+python3 CryptoPriceTracker.py tax --method specific --select sel.json --year 2024
+```
+
+`--method specific` requires `--select FILE` (a lot-selection JSON file); without it
+the command exits with a clear message pointing you at an automatic method.
+
+## V1 Ledger Migration
+
+If your `ledger.json` is in the old single-wallet flat format, it is upgraded
+automatically the first time you run any command. The original is preserved at
+`ledger.json.v1.bak`. Run `migrate --dry-run` first to preview the conversion:
+
+```bash
+python3 CryptoPriceTracker.py migrate --dry-run   # preview, writes nothing
+python3 CryptoPriceTracker.py migrate             # upgrade in place + backup
+```
+
+After migration, `ledger.json` uses the coinbasis externally-tagged multi-wallet
+schema (one `{"Buy": {...}}` / `{"Sell": {...}}` / `{"Income": {...}}` object per
+entry, each with a `wallet` field).
 
 ## Tax & Cost-Basis
 
@@ -85,7 +159,26 @@ date,coin,action,quantity,price_usd,fee_usd
 | `fee_usd` | Transaction fee in USD (can be 0) |
 
 A `transactions.csv` sample template is included in the repository. Buy fees are added to
-the cost basis; sell fees are subtracted from proceeds.
+the cost basis; sell fees are subtracted from proceeds. An optional `wallet` column is
+accepted for multi-wallet ledgers (defaults to `default`).
+
+### Ledger schema
+
+`ledger.json` uses the coinbasis externally-tagged multi-wallet schema — a JSON array
+of single-key objects, one per event:
+
+```json
+[
+  {"Buy":  {"timestamp": "2023-01-01T00:00:00Z", "wallet": "default",
+            "asset": "bitcoin", "quantity": "1", "unit_price": "20000", "fee": "0"}},
+  {"Income": {"timestamp": "2023-06-01T00:00:00Z", "wallet": "default",
+              "asset": "ethereum", "quantity": "2", "value": "4000", "source": "Staking"}}
+]
+```
+
+Old single-wallet flat ledgers (`{"date", "coin", "action", "quantity", "price_usd",
+"fee_usd"}` rows) are transparently upgraded on first use — see **V1 Ledger Migration**
+above.
 
 ### Cost-basis methods
 
@@ -95,7 +188,9 @@ Pass `--method` to `tax` to select how lots are matched when you sell:
 |---|---|---|
 | FIFO | `--method fifo` (default) | Oldest lots consumed first |
 | LIFO | `--method lifo` | Newest lots consumed first |
+| HIFO | `--method hifo` | Highest-cost lots consumed first |
 | Average cost | `--method average` | Pooled average basis across all remaining lots |
+| Specific-ID | `--method specific --select FILE` | Lots chosen explicitly from a selection JSON file |
 
 Holdings held more than 365 days at the time of sale are classified long-term; 365 days or
 fewer are short-term.
@@ -283,71 +378,53 @@ Pass `--days N` to control how many days of price history are fetched from CoinG
 ## Development
 
 ```bash
-# Install runtime + dev dependencies
-python3 -m pip install -r requirements-dev.txt
+# Install the app plus the two packages in editable mode for local development
+python3 -m pip install -e .
+python3 -m pip install -e ../coinbasis -e ../cryptolytics   # if developing the packages too
 
 # Run the test suite
 python3 -m pytest
 
-# Lint for unused imports / undefined names
-python3 -m pyflakes CryptoPriceTracker.py ledger.py costbasis.py holdings.py tax.py report.py analytics.py rebalance.py backtest.py marketdata.py rebalance_report.py staking.py staking_api.py staking_report.py news_source.py news.py news_report.py history.py chart.py history_report.py
+# Lint
+python3 -m ruff check .
 ```
+
+All tests mock the `coinbasis` and `cryptolytics` calls (no live CoinGecko/DefiLlama/RSS
+network access), so the suite runs offline and deterministically.
 
 ## Project Structure
 
 ```
 Crypto-Price-Tracker/
-├── CryptoPriceTracker.py              # Entry point: argparse CLI, fetch prices, compute profit, print table
-├── ledger.py                          # Transaction dataclass, validation, JSON load/save, CSV import, interactive add
-├── costbasis.py                       # Lot matching: FIFO, LIFO, average cost; produces Disposal records
-├── holdings.py                        # Derives current holdings from ledger; falls back to built-in dict
-├── tax.py                             # Tax config loading, realized-gain summary, and tax liability estimate
-├── report.py                          # Formats realized, unrealized, and tax sections as text
-├── analytics.py                       # Pure risk math: daily returns, volatility, correlation, portfolio volatility
-├── rebalance.py                       # Target-weight strategies (equal, marketcap, custom) and trade computation
-├── backtest.py                        # Buy-and-hold backtest over a price history window
-├── marketdata.py                      # Historical price and market-cap fetching from CoinGecko
-├── rebalance_report.py                # Format allocation, risk, correlation, trades, and backtest sections
-├── staking.py                         # Pure staking logic: load config/rewards, effective APYs, yield, combined P/L
-├── staking_api.py                     # Best-effort DefiLlama APY fetch (network); returns fraction per symbol
-├── staking_report.py                  # Format yield, rewards, staked-vs-not, and combined P/L sections
-├── news_source.py                     # RSS feed and CryptoPanic fetch; DOCTYPE guard (stdlib-only, no defusedxml)
-├── news.py                            # News config loading, per-coin keyword filtering, lexicon sentiment
+├── CryptoPriceTracker.py              # Entry point: argparse CLI + thin orchestrators over the packages
+├── appio.py                           # All file/config I/O: ledger load/save, V1 migration, CSV import, snapshots
+├── appconfig.py                       # Env/XDG → AppContext (the only place env vars are read)
+├── report.py                          # Format prices, holdings, valuation, realized, unrealized, tax sections
+├── rebalance_report.py                # Format allocation and trade sections
+├── staking_report.py                  # Format staking yield + rewards sections
 ├── news_report.py                     # Format per-coin sentiment summary and headline list
-├── history.py                         # Ledger-replay holdings as-of a date, daily series reconstruction, JSONL snapshots
-├── chart.py                           # Unicode sparkline and horizontal-bar chart primitives
 ├── history_report.py                  # Format chart, playback, and per-day snapshot output
+├── perf_report.py                     # Format performance metrics + sparkline
+├── chart.py                           # Unicode sparkline and horizontal-bar chart primitives
+├── pyproject.toml                     # Project metadata + deps (coinbasis, cryptolytics)
 ├── taxconfig.json                     # US tax-rate preset (editable; missing/bad file falls back to defaults)
 ├── transactions.csv                   # Sample CSV import template
 ├── targets.sample.json                # Sample custom rebalancing targets (copy to targets.json to use)
 ├── staking.sample.json                # Sample staking config (copy to staking.json to use)
 ├── rewards.sample.csv                 # Sample staking rewards log (copy to rewards.csv to use)
 ├── news.sample.json                   # Sample news config (copy to news.json to use)
-├── tests/
-│   ├── test_crypto_price_tracker.py   # Original suite: fetch, profit math, skip paths
-│   ├── test_ledger.py                 # Ledger validation, JSON round-trip, CSV import, interactive add
-│   ├── test_costbasis.py              # FIFO, LIFO, average, fees, long/short-term, oversell
-│   ├── test_holdings.py               # Holdings derivation and ledger-or-default loading
-│   ├── test_tax.py                    # Config loading, summarize, progressive brackets, tax floors
-│   ├── test_report.py                 # Format helpers for realized, unrealized, and tax sections
-│   ├── test_cli.py                    # Argparse builder and run_tax / run_rebalance / run_staking / run_news integration
-│   ├── test_analytics.py              # daily_returns, volatility, correlation, portfolio_volatility
-│   ├── test_rebalance.py              # target_weights, load_targets, compute_trades
-│   ├── test_backtest.py               # buy_and_hold_return with renormalization
-│   ├── test_marketdata.py             # fetch_history, fetch_market_caps (mocked network)
-│   ├── test_rebalance_report.py       # format_* helpers for all five report sections
-│   ├── test_staking.py                # load_config, load_rewards, effective_apys, projected_yield, combined_pl
-│   ├── test_staking_api.py            # fetch_apys: TVL selection, unmatched symbol, HTTP error (mocked network)
-│   ├── test_staking_report.py         # format_yield, format_rewards, format_comparison, format_combined_pl
-│   ├── test_news_source.py            # fetch_rss (parse, HTTP error, DOCTYPE guard), fetch_cryptopanic (mocked)
-│   ├── test_news.py                   # load_news_config, keywords_for, filter_items, classify_sentiment, sentiment_summary
-│   ├── test_news_report.py            # format_coin_news: items, limit, no-items
-│   ├── test_history.py                # holdings_as_of, reconstruct_series, make/append/load snapshots
-│   ├── test_chart.py                  # sparkline (empty, uniform, scaled) and hbar (positive, negative, zero)
-│   └── test_history_report.py        # format_chart, format_playback (news markers), format_snapshot
-├── requirements.txt                   # Runtime dependency (requests)
-└── requirements-dev.txt               # Dev/test dependencies (pytest, pyflakes)
+└── tests/
+    ├── conftest.py                    # Shared fixtures: tmp_ledger, v1 ledger, MockClient
+    ├── test_appio.py                  # Loaders, V1 migration, CSV import, snapshot round-trip
+    ├── test_formatters.py             # All formatters with fixed package dataclasses (pure)
+    ├── test_cli.py                    # Argparse builder + run_* dispatch + error paths (mocked packages)
+    ├── test_chart.py                  # sparkline and hbar primitives
+    └── test_integration.py            # End-to-end pipeline per command (mocked packages)
 ```
+
+All cost-basis math, lot matching, tax estimation, market-data fetching, analytics,
+staking, news, and history reconstruction now live in the `coinbasis` and `cryptolytics`
+packages rather than in this repository.
 
 ## License
 
