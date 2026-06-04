@@ -317,6 +317,26 @@ def test_run_staking_no_config_exits(tmp_path, capsys, monkeypatch):
     assert out.strip() or True  # not crash
 
 
+def test_run_staking_with_real_rewards_csv(tmp_path, capsys, monkeypatch):
+    """Regression: staking must not crash on a real rewards.csv (CSV values are
+    strings on disk; rewards_summary sums them numerically)."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("COINGECKO_API_KEY", raising=False)
+    _write_coinbasis_ledger(tmp_path / "ledger.json", [])
+    (tmp_path / "staking.json").write_text(
+        json.dumps({"ethereum": {"staked_qty": 2.0, "symbol": "ETH", "apy": 0.04}})
+    )
+    (tmp_path / "rewards.csv").write_text(
+        "date,coin,quantity\n2024-01-01,ethereum,0.012\n2024-02-01,ethereum,0.013\n"
+    )
+    # Do NOT mock rewards_summary — exercise the real string->float boundary.
+    with patch("coinlytics.fetch_apys", return_value={}):
+        cpt.cli(["--data-dir", str(tmp_path), "staking"])
+    out = capsys.readouterr().out
+    assert "ethereum" in out.lower()
+    assert "0.0250" in out  # 0.012 + 0.013 summed as floats, rendered %.4f
+
+
 def test_run_news_with_mock_feed(tmp_path, capsys, monkeypatch):
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("COINGECKO_API_KEY", raising=False)

@@ -295,19 +295,29 @@ def load_staking_config(path: str) -> Optional[dict]:
 
 
 def load_rewards(path: str) -> list[dict]:
-    """Load rewards.csv → list of row dicts.  Returns [] if absent."""
+    """Load rewards.csv → list of {date, coin, quantity} dicts with quantity as a
+    float (coinlytics expects numeric quantities).  Returns [] if absent.  Rows
+    with an invalid quantity or an empty coin are skipped with a stderr notice."""
     if not os.path.exists(path):
         return []
+    rows = []
     try:
-        rows = []
         with open(path, newline="") as f:
-            reader = _csv.DictReader(f)
-            for row in reader:
-                rows.append(dict(row))
-        return rows
+            for lineno, row in enumerate(_csv.DictReader(f), start=2):
+                coin = (row.get("coin") or "").strip()
+                try:
+                    quantity = float(row["quantity"])
+                except (KeyError, TypeError, ValueError):
+                    print(f"  (skipped rewards line {lineno}: invalid quantity)", file=sys.stderr)
+                    continue
+                if not coin:
+                    print(f"  (skipped rewards line {lineno}: missing coin)", file=sys.stderr)
+                    continue
+                rows.append({"date": (row.get("date") or "").strip(), "coin": coin, "quantity": quantity})
     except OSError as exc:
         print(f"(rewards.csv unreadable: {exc})", file=sys.stderr)
         return []
+    return rows
 
 
 def load_news_config(path: str) -> dict:

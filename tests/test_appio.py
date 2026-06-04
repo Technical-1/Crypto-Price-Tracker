@@ -278,7 +278,22 @@ def test_load_rewards_csv(tmp_path):
     rewards = appio.load_rewards(str(p))
     assert len(rewards) == 1
     assert rewards[0]["coin"] == "ethereum"
-    assert rewards[0]["quantity"] == "0.5"
+    # quantity must be a float — coinlytics.rewards_summary sums these numerically
+    assert rewards[0]["quantity"] == 0.5
+    assert isinstance(rewards[0]["quantity"], float)
+
+
+def test_load_rewards_skips_invalid_rows(tmp_path, capsys):
+    p = tmp_path / "rewards.csv"
+    with open(p, "w", newline="") as f:
+        writer = _csv.writer(f)
+        writer.writerow(["date", "coin", "quantity"])
+        writer.writerow(["2024-01-01", "ethereum", "0.5"])     # valid
+        writer.writerow(["2024-02-01", "ethereum", "notanum"])  # bad quantity -> skipped
+        writer.writerow(["2024-03-01", "", "1.0"])              # missing coin -> skipped
+    rewards = appio.load_rewards(str(p))
+    assert [r["quantity"] for r in rewards] == [0.5]
+    assert "skipped" in capsys.readouterr().err
 
 
 def test_snapshots_round_trip(tmp_path):
