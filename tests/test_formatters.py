@@ -1,11 +1,15 @@
 """Pure formatter tests — no mocks. Feed fixed package dataclasses, assert output."""
 
-import pytest
 from decimal import Decimal
 from datetime import datetime, timezone
 import coinbasis
 import cryptolytics
 import report
+import rebalance_report
+import staking_report
+import news_report
+import history_report
+import perf_report
 
 
 def _utc(y, m, d):
@@ -100,9 +104,6 @@ def test_format_unrealized_missing_prices_notice():
     )
     out = report.format_unrealized(report_obj)
     assert "solana" in out or "missing" in out.lower()
-
-
-import chart
 
 
 def _make_book(coins: dict) -> cryptolytics.PriceBook:
@@ -217,9 +218,6 @@ def test_format_tax_shows_estimate():
     assert "US" in out or config.jurisdiction in out
 
 
-import rebalance_report
-
-
 def _make_plan(in_balance: bool = False) -> cryptolytics.RebalancePlan:
     from cryptolytics import RebalanceAction, RebalancePlan
     actions = [
@@ -277,10 +275,6 @@ def test_in_balance_banner():
     assert "balance" in out.lower() or "no trades" in out.lower()
 
 
-import staking_report
-import news_report
-
-
 def test_format_staking_summary():
     eff_apys = {"ethereum": (0.045, "api"), "solana": (0.07, "manual")}
     rewards_sum = {"ethereum": 0.5}
@@ -304,9 +298,6 @@ def test_news_report_uses_cryptolytics_sentiment():
     assert "bullish" in out.lower() or "bearish" in out.lower() or "neutral" in out.lower()
 
 
-import history_report
-
-
 def test_format_chart_renders_sparkline():
     series = [
         {"date": "2024-01-01", "value": 1000.0, "cost": 800.0, "pl": 200.0},
@@ -325,9 +316,6 @@ def test_format_snapshot_from_cryptolytics_snapshot():
     out = history_report.format_snapshot(snap, rows)
     assert "bitcoin" in out
     assert "1200" in out
-
-
-import perf_report
 
 
 def test_format_performance_with_metrics():
