@@ -66,3 +66,50 @@ def test_appconfig_method_specific_requires_select(tmp_path, monkeypatch, capsys
     assert exc_info.value.code == 1
     err = capsys.readouterr().err
     assert "--select" in err
+
+
+# ── Task 18: parent parser + global flags ─────────────────────────────────────
+
+def test_parser_global_method_flag():
+    parser = cpt.build_parser()
+    args = parser.parse_args(["tax", "--method", "hifo"])
+    assert args.method == "hifo"
+
+
+def test_parser_global_select_flag(tmp_path):
+    sel_path = str(tmp_path / "sel.json")
+    parser = cpt.build_parser()
+    args = parser.parse_args(["tax", "--select", sel_path])
+    assert args.select == sel_path
+
+
+def test_parser_global_offline_flag():
+    parser = cpt.build_parser()
+    args = parser.parse_args(["prices", "--offline"])
+    assert args.offline is True
+
+
+def test_parser_global_data_dir_flag(tmp_path):
+    parser = cpt.build_parser()
+    args = parser.parse_args(["--data-dir", str(tmp_path), "tax"])
+    assert args.data_dir == str(tmp_path)
+
+
+def test_parser_no_subcommand_has_command_none():
+    parser = cpt.build_parser()
+    args = parser.parse_args([])
+    assert getattr(args, "command", None) is None
+
+
+def test_parser_unknown_flag_exits_2():
+    with pytest.raises(SystemExit) as exc_info:
+        cpt.cli(["--totally-unknown-flag-xyz"])
+    assert exc_info.value.code == 2
+
+
+def test_parser_method_choices():
+    parser = cpt.build_parser()
+    # all valid choices parse without error
+    for m in ["fifo", "lifo", "hifo", "average", "specific"]:
+        args = parser.parse_args(["tax", "--method", m])
+        assert args.method == m
