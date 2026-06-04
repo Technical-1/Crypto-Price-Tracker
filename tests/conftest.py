@@ -2,13 +2,10 @@
 from __future__ import annotations
 
 import json
-import os
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Optional
 
 import pytest
-import coinbasis
 import cryptolytics
 
 
