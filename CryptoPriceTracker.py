@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import os as _os
 import sys
 from typing import Optional
 
@@ -15,6 +16,7 @@ import rebalance_report
 import staking_report
 import news_report
 import history_report
+import perf_report
 
 # ── Legacy demo fallback (kept for backward-compat when ledger is absent) ─────
 originalHoldings = {
@@ -190,16 +192,85 @@ def _build_ctx(args: argparse.Namespace) -> appconfig.AppContext:
 # ── Orchestrators ─────────────────────────────────────────────────────────────
 
 def run_prices(ctx: appconfig.AppContext, args: argparse.Namespace) -> None:
-    """Stub — implemented in Part 4 (Task 23)."""
-    raise NotImplementedError("run_prices: see plan-04 Task 23")
+    """prices command (also the bare default view): current prices + unrealized P/L."""
+    sparkline_flag = getattr(args, "sparkline", False)
+    ledger_path = ctx.paths["ledger"]
+
+    # Load ledger — fall back to demo if absent (preserves original no-arg UX)
+    if not _os.path.exists(ledger_path):
+        _run_prices_demo(ctx, sparkline_flag)
+        return
+
+    txs = appio.load_ledger(ledger_path, no_migrate=getattr(args, "no_migrate", False))
+
+    portfolio = coinbasis.Portfolio.from_transactions(txs)
+    try:
+        holdings_list = portfolio.holdings(ctx.method)
+    except coinbasis.SelectionRequired:
+        print(
+            "--method specific is not available for prices view; "
+            "use fifo/lifo/hifo/average.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    asset_ids = list({h.asset for h in holdings_list})
+    client = cryptolytics.CoinGeckoClient(ctx.cg_config)
+
+    try:
+        book = client.prices(asset_ids, with_sparkline_7d=sparkline_flag)
+    except cryptolytics.RateLimitedError as exc:
+        retry_msg = (f"; retry after {exc.retry_after}s" if getattr(exc, "retry_after", None)
+                     else "")
+        print(
+            f"Rate limited by CoinGecko and no cached prices available{retry_msg}.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    except cryptolytics.PriceSourceError as exc:
+        print(f"Failed to fetch prices from CoinGecko: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    if book.stale:
+        print("(showing last-good prices; offline/over rate limit)", file=sys.stderr)
+
+    valuation = portfolio.valuation(ctx.method, book.prices_map())
+    print(report.format_prices(valuation, book))
+
+
+def _run_prices_demo(ctx: appconfig.AppContext, sparkline_flag: bool) -> None:
+    """Fallback demo view using originalHoldings (preserves V1 no-arg UX)."""
+    demo_ids = list(originalHoldings.keys())
+    client = cryptolytics.CoinGeckoClient(ctx.cg_config)
+    try:
+        book = client.prices(demo_ids)
+    except cryptolytics.CryptolyticsError as exc:
+        print(f"Failed to fetch prices: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    print("        Coin              Profit      Cost     24hr %")
+    print("---------------------   ----------   ------   ---------")
+    for coin_id, holding in originalHoldings.items():
+        q = book.quotes.get(coin_id)
+        if q is None:
+            print(f"  (skipped {coin_id}: no price data returned)", file=sys.stderr)
+            continue
+        total = holding["total"]
+        cost_per_unit = holding["cost"] / total
+        profit = (float(q.price) - cost_per_unit) * total
+        change_24h = float(q.change_24h) if q.change_24h is not None else 0.0
+        print(
+            f"  {coin_id:<22} ${profit:>9.2f}   "
+            f"${cost_per_unit:>5.0f}   {change_24h:>+8.2f}%"
+        )
 
 
 def run_holdings(ctx: appconfig.AppContext, args: argparse.Namespace) -> None:
-    raise NotImplementedError("run_holdings: see plan-04 Task 23")
+    raise NotImplementedError("run_holdings: see plan-04 Task 24")
 
 
 def run_valuation(ctx: appconfig.AppContext, args: argparse.Namespace) -> None:
-    raise NotImplementedError("run_valuation: see plan-04 Task 24")
+    raise NotImplementedError("run_valuation: see plan-04 Task 25")
 
 
 def _print_section(title: str, body: str) -> None:
