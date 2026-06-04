@@ -229,3 +229,53 @@ def test_migrate_command_already_migrated(tmp_path, capsys):
     appio.migrate_command(str(ledger_path), dry_run=False)
     out = capsys.readouterr().out
     assert "already" in out.lower() or "no migration" in out.lower()
+
+
+def test_load_taxconfig_returns_default_when_missing(tmp_path):
+    tc = appio.load_taxconfig(str(tmp_path / "taxconfig.json"))
+    assert isinstance(tc, coinbasis.TaxConfig)
+    assert tc.jurisdiction == "US"
+
+
+def test_load_taxconfig_parses_file(tmp_path):
+    cfg_path = tmp_path / "taxconfig.json"
+    _write_json(cfg_path, {
+        "jurisdiction": "CA",
+        "long_term_threshold_days": 365,
+        "short_term_rate": "0.33",
+        "long_term_brackets": [{"up_to": None, "rate": "0.15"}],
+    })
+    tc = appio.load_taxconfig(str(cfg_path))
+    assert tc.jurisdiction == "CA"
+    assert tc.short_term_rate == Decimal("0.33")
+
+
+def test_load_targets_returns_decimal_weights(tmp_path):
+    p = tmp_path / "targets.json"
+    _write_json(p, {"bitcoin": 0.6, "ethereum": 0.4})
+    targets = appio.load_targets(str(p))
+    assert targets["bitcoin"] == Decimal("0.6")
+    assert targets["ethereum"] == Decimal("0.4")
+
+
+def test_load_targets_missing_returns_none(tmp_path):
+    result = appio.load_targets(str(tmp_path / "targets.json"))
+    assert result is None
+
+
+def test_load_news_config_defaults_on_missing(tmp_path):
+    cfg = appio.load_news_config(str(tmp_path / "news.json"))
+    assert "feeds" in cfg
+    assert cfg["feeds"] == list(cryptolytics.DEFAULT_FEEDS)
+
+
+def test_load_rewards_csv(tmp_path):
+    p = tmp_path / "rewards.csv"
+    with open(p, "w", newline="") as f:
+        writer = _csv.writer(f)
+        writer.writerow(["date", "coin", "quantity"])
+        writer.writerow(["2024-01-01", "ethereum", "0.5"])
+    rewards = appio.load_rewards(str(p))
+    assert len(rewards) == 1
+    assert rewards[0]["coin"] == "ethereum"
+    assert rewards[0]["quantity"] == "0.5"

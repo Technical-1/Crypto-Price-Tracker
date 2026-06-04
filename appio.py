@@ -12,8 +12,11 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Optional
 
+import csv as _csv
+
 import coinbasis
 import coinbasis.serde as _serde
+import cryptolytics as _cl
 
 DEFAULT_WALLET = "default"
 
@@ -238,3 +241,84 @@ def save_ledger(path: str, txs: list[coinbasis.Transaction]) -> None:
     with open(tmp, "w") as f:
         f.write(_serde.ledger_to_json(txs, indent=2))
     os.replace(tmp, path)
+
+
+def load_taxconfig(path: str) -> coinbasis.TaxConfig:
+    """Load taxconfig.json → coinbasis.TaxConfig.
+    Missing or invalid file → TaxConfig.default() + stderr notice."""
+    if not os.path.exists(path):
+        return coinbasis.TaxConfig.default()
+    try:
+        with open(path) as f:
+            d = json.load(f)
+        brackets = [
+            coinbasis.TaxBracket(
+                up_to=Decimal(str(b["up_to"])) if b.get("up_to") is not None else None,
+                rate=Decimal(str(b["rate"])),
+            )
+            for b in d.get("long_term_brackets", [])
+        ]
+        return coinbasis.TaxConfig(
+            jurisdiction=d.get("jurisdiction", "US"),
+            long_term_threshold_days=int(d.get("long_term_threshold_days", 365)),
+            short_term_rate=Decimal(str(d.get("short_term_rate", "0.35"))),
+            long_term_brackets=brackets,
+        )
+    except (KeyError, ValueError, TypeError, json.JSONDecodeError) as exc:
+        print(f"(taxconfig.json invalid: {exc}; using defaults)", file=sys.stderr)
+        return coinbasis.TaxConfig.default()
+
+
+def load_targets(path: str) -> Optional[dict[str, Decimal]]:
+    """Load targets.json → {coin: Decimal(weight)}.  Returns None if absent."""
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path) as f:
+            d = json.load(f)
+        return {k: Decimal(str(v)) for k, v in d.items()}
+    except (json.JSONDecodeError, ValueError, TypeError) as exc:
+        print(f"(targets.json invalid: {exc})", file=sys.stderr)
+        return None
+
+
+def load_staking_config(path: str) -> Optional[dict]:
+    """Load staking.json.  Returns None if absent."""
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError) as exc:
+        print(f"(staking.json invalid: {exc})", file=sys.stderr)
+        return None
+
+
+def load_rewards(path: str) -> list[dict]:
+    """Load rewards.csv → list of row dicts.  Returns [] if absent."""
+    if not os.path.exists(path):
+        return []
+    try:
+        rows = []
+        with open(path, newline="") as f:
+            reader = _csv.DictReader(f)
+            for row in reader:
+                rows.append(dict(row))
+        return rows
+    except OSError as exc:
+        print(f"(rewards.csv unreadable: {exc})", file=sys.stderr)
+        return []
+
+
+def load_news_config(path: str) -> dict:
+    """Load news.json.  Returns defaults (DEFAULT_FEEDS) if absent."""
+    defaults = {"feeds": list(_cl.DEFAULT_FEEDS), "cryptopanic_token": None, "keywords": {}}
+    if not os.path.exists(path):
+        return defaults
+    try:
+        with open(path) as f:
+            d = json.load(f)
+        return {**defaults, **d}
+    except (json.JSONDecodeError, OSError) as exc:
+        print(f"(news.json invalid: {exc}; using defaults)", file=sys.stderr)
+        return defaults
