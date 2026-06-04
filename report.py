@@ -91,8 +91,10 @@ def format_unrealized(portfolio_report: coinbasis.PortfolioReport) -> str:
 def format_prices(
     portfolio_report: coinbasis.PortfolioReport,
     book: "cryptolytics.PriceBook",
+    sparklines: dict[str, list[float]] | None = None,
 ) -> str:
     """Prices view (V2 view 1): COIN · PRICE · 24H% · 7D% · HELD · COST · VALUE · PROFIT · ALLOC%."""
+    spark_map = sparklines if sparklines is not None else book.sparklines
     lines = []
     header = (
         f"{'Coin':<16} {'Price':>12} {'24h%':>8} {'7d%':>8} "
@@ -105,7 +107,7 @@ def format_prices(
         q = book.quotes.get(av.asset)
         c24 = float(q.change_24h) if q and q.change_24h is not None else 0.0
         c7 = float(q.change_7d) if q and q.change_7d is not None else 0.0
-        spark = book.sparklines.get(av.asset, [])
+        spark = spark_map.get(av.asset, [])
         spark_str = " " + _chart.sparkline(spark) if spark else ""
         alloc_pct = float(av.allocation) * 100
         line = (

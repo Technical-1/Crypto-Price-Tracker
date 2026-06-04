@@ -263,7 +263,7 @@ def run_prices(ctx: appconfig.AppContext, args: argparse.Namespace) -> None:
     client = cryptolytics.CoinGeckoClient(ctx.cg_config)
 
     try:
-        book = client.prices(asset_ids, with_sparkline_7d=sparkline_flag)
+        book = client.prices(asset_ids)
     except cryptolytics.RateLimitedError as exc:
         retry_msg = (f"; retry after {exc.retry_after}s" if getattr(exc, "retry_after", None)
                      else "")
@@ -279,8 +279,17 @@ def run_prices(ctx: appconfig.AppContext, args: argparse.Namespace) -> None:
     if book.stale:
         print("(showing last-good prices; offline/over rate limit)", file=sys.stderr)
 
+    sparklines: dict[str, list[float]] = {}
+    if sparkline_flag:
+        for coin in asset_ids:
+            try:
+                sparklines[coin] = client.sparkline(coin, days=7)
+            except cryptolytics.CryptolyticsError:
+                # Best-effort: a missing sparkline shouldn't fail the prices view.
+                continue
+
     valuation = portfolio.valuation(ctx.method, book.prices_map())
-    print(report.format_prices(valuation, book))
+    print(report.format_prices(valuation, book, sparklines))
 
 
 def _run_prices_demo(ctx: appconfig.AppContext, sparkline_flag: bool) -> None:

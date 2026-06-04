@@ -408,6 +408,65 @@ def test_run_prices_with_ledger(tmp_path, capsys, monkeypatch):
     assert "2.5" in out or "2.50" in out
 
 
+def test_run_prices_sparkline_fetches_series(tmp_path, capsys, monkeypatch):
+    """--sparkline fetches a per-coin series via client.sparkline (not a prices kwarg)."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("COINGECKO_API_KEY", raising=False)
+    ledger_path = tmp_path / "ledger.json"
+    _write_coinbasis_ledger(ledger_path, [
+        {"Buy": {"timestamp": "2024-01-01T00:00:00Z", "wallet": "default",
+                 "asset": "bitcoin", "quantity": "1", "unit_price": "50000", "fee": "0"}}
+    ])
+
+    mock_portfolio = MagicMock()
+    mock_portfolio.holdings.return_value = [
+        coinbasis.Holding(asset="bitcoin", wallet="default",
+                          quantity=Decimal("1"), cost_basis=Decimal("50000"),
+                          average_cost=Decimal("50000"))
+    ]
+    mock_valuation = MagicMock()
+    mock_valuation.assets = [
+        coinbasis.AssetValuation(
+            asset="bitcoin", quantity=Decimal("1"),
+            cost_basis=Decimal("50000"), price=Decimal("60000"),
+            market_value=Decimal("60000"), unrealized=Decimal("10000"),
+            allocation=Decimal("1"),
+        )
+    ]
+    mock_valuation.total_cost = Decimal("50000")
+    mock_valuation.total_value = Decimal("60000")
+    mock_valuation.total_unrealized = Decimal("10000")
+    mock_valuation.total_return = Decimal("0.2")
+    mock_valuation.missing_prices = []
+    mock_portfolio.valuation.return_value = mock_valuation
+
+    mock_book = MagicMock()
+    mock_book.prices_map.return_value = {"bitcoin": Decimal("60000")}
+    mock_book.stale = False
+    mock_book.quotes = {
+        "bitcoin": cryptolytics.Quote(
+            price=Decimal("60000"), change_24h=Decimal("2.5"),
+            change_7d=Decimal("5.0"), market_cap=None, volume_24h=None,
+        )
+    }
+    mock_book.sparklines = {}
+
+    with patch("coinbasis.Portfolio.from_transactions", return_value=mock_portfolio), \
+         patch("cryptolytics.CoinGeckoClient") as MockCl:
+        client = MockCl.return_value
+        client.prices.return_value = mock_book
+        client.sparkline.return_value = [1.0, 2.0, 3.0, 4.0, 3.5, 5.0, 6.0]
+        cpt.cli(["--data-dir", str(tmp_path), "prices", "--sparkline"])
+
+    out = capsys.readouterr().out
+    # prices() must be called without the bogus with_sparkline_7d kwarg.
+    _, prices_kwargs = client.prices.call_args
+    assert "with_sparkline_7d" not in prices_kwargs
+    # The sparkline series is fetched per coin and rendered into the row.
+    client.sparkline.assert_called_once_with("bitcoin", days=7)
+    assert "bitcoin" in out
+
+
 def test_run_prices_empty_ledger_shows_demo_table(tmp_path, capsys, monkeypatch):
     """Empty ledger falls back to originalHoldings demo without crashing."""
     monkeypatch.chdir(tmp_path)
