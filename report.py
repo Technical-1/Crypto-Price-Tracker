@@ -1,47 +1,51 @@
 # report.py
+from decimal import Decimal
+import coinbasis
 
 
-def format_realized(disposals):
-    """Render realized disposals as a text table with short/long-term totals."""
-    lines = ["Realized gains/losses:",
-             "      Coin        Sell Date    Qty      Proceeds    Basis     Gain     Term",
-             "  ------------   ----------   ------   ----------   ------   ------   ------"]
-    short_total = long_total = 0.0
-    for d in disposals:
-        if d.term == "short":
-            short_total += d.realized_gain
+def format_realized(rows: list[coinbasis.RealizedGain]) -> str:
+    """Render a table of RealizedGain rows with short/long subtotals."""
+    if not rows:
+        return "Realized gains: (none)\n"
+
+    lines = []
+    header = (
+        f"{'Asset':<12} {'Wallet':<10} {'Acquired':<12} {'Disposed':<12} "
+        f"{'Qty':>10} {'Proceeds':>12} {'Basis':>12} {'Gain':>12} {'Term':<6}"
+    )
+    lines.append(header)
+    lines.append("-" * len(header))
+
+    short_gain = Decimal("0")
+    long_gain = Decimal("0")
+    other_gain = Decimal("0")
+
+    for r in rows:
+        acq = r.acquired_at.strftime("%Y-%m-%d") if r.acquired_at else "N/A"
+        dis = r.disposed_at.strftime("%Y-%m-%d")
+        term_str = r.term.value if r.term else "N/A"
+
+        line = (
+            f"{r.asset:<12} {r.wallet:<10} {acq:<12} {dis:<12} "
+            f"{float(r.quantity):>10.4f} {float(r.proceeds):>12.2f} "
+            f"{float(r.cost_basis):>12.2f} {float(r.gain):>12.2f} {term_str:<6}"
+        )
+        lines.append(line)
+
+        if r.term == coinbasis.Term.SHORT:
+            short_gain += r.gain
+        elif r.term == coinbasis.Term.LONG:
+            long_gain += r.gain
         else:
-            long_total += d.realized_gain
-        lines.append("  %-12s   %-10s   %6.3f   %10.2f   %6.2f   %6.2f   %-5s" % (
-            d.coin, d.sell_date, d.quantity, d.proceeds, d.cost_basis,
-            d.realized_gain, d.term))
-    lines.append("  Short-term total: %.2f" % short_total)
-    lines.append("  Long-term total:  %.2f" % long_total)
-    return "\n".join(lines)
+            other_gain += r.gain
 
-
-def format_unrealized(held, prices):
-    """Render current holdings valued at live prices vs cost basis."""
-    lines = ["Unrealized P/L (live prices):",
-             "      Coin         Qty       Value      Basis     Unrealized",
-             "  ------------   ------   ----------   ------   ------------"]
-    for coin, h in held.items():
-        coin_price = prices.get(coin)
-        if not coin_price or coin_price.get("usd") is None:
-            lines.append("  (skipped %s: no price data)" % coin)
-            continue
-        value = h["total"] * coin_price["usd"]
-        unrealized = value - h["cost"]
-        lines.append("  %-12s   %6.3f   %10.2f   %6.2f   %10.2f" % (
-            coin, h["total"], value, h["cost"], unrealized))
-    return "\n".join(lines)
-
-
-def format_tax(short_gain, long_gain, short_tax, long_tax, config):
-    """Render the estimated tax summary."""
-    return "\n".join([
-        "Estimated tax (%s):" % config.get("jurisdiction", "default"),
-        "  Short-term gain: %10.2f   tax: %8.2f" % (short_gain, short_tax),
-        "  Long-term gain:  %10.2f   tax: %8.2f" % (long_gain, long_tax),
-        "  Total estimated tax: %.2f" % (short_tax + long_tax),
-    ])
+    lines.append("-" * len(header))
+    if short_gain:
+        lines.append(f"  Short-term gain: ${float(short_gain):>12.2f}")
+    if long_gain:
+        lines.append(f"  Long-term gain:  ${float(long_gain):>12.2f}")
+    if other_gain:
+        lines.append(f"  Other gain:      ${float(other_gain):>12.2f}")
+    total = short_gain + long_gain + other_gain
+    lines.append(f"  Total gain:      ${float(total):>12.2f}")
+    return "\n".join(lines) + "\n"
