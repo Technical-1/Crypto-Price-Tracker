@@ -157,27 +157,72 @@ def cli(argv: Optional[list[str]] = None) -> None:
 
     # All data commands share the same AppContext pattern
     ctx = _build_ctx(args)
-    if cmd == "prices" or cmd is None:
-        run_prices(ctx, args)
-    elif cmd == "holdings":
-        run_holdings(ctx, args)
-    elif cmd == "valuation":
-        run_valuation(ctx, args)
-    elif cmd == "tax":
-        run_tax(ctx, args)
-    elif cmd == "rebalance":
-        run_rebalance(ctx, args)
-    elif cmd == "performance":
-        run_performance(ctx, args)
-    elif cmd == "staking":
-        run_staking(ctx, args)
-    elif cmd == "news":
-        run_news(ctx, args)
-    elif cmd == "history":
-        run_history(ctx, args)
+    if cmd in (None, "prices", "holdings", "valuation", "tax", "rebalance",
+               "performance", "staking", "news", "history"):
+        _dispatch(cmd, ctx, args)
     else:
         parser.print_help()
         sys.exit(2)
+
+
+def _dispatch(cmd: Optional[str], ctx: appconfig.AppContext,
+              args: argparse.Namespace) -> None:
+    """Call the appropriate run_* function with a single typed-error catch site.
+
+    Maps coinbasis/cryptolytics typed errors to the CLI UX (stderr + exit code)
+    so no unhandled exception escapes to the user.
+    """
+    try:
+        if cmd == "prices" or cmd is None:
+            run_prices(ctx, args)
+        elif cmd == "holdings":
+            run_holdings(ctx, args)
+        elif cmd == "valuation":
+            run_valuation(ctx, args)
+        elif cmd == "tax":
+            run_tax(ctx, args)
+        elif cmd == "rebalance":
+            run_rebalance(ctx, args)
+        elif cmd == "performance":
+            run_performance(ctx, args)
+        elif cmd == "staking":
+            run_staking(ctx, args)
+        elif cmd == "news":
+            run_news(ctx, args)
+        elif cmd == "history":
+            run_history(ctx, args)
+    except coinbasis.SelectionRequired:
+        print(
+            "--method specific requires --select FILE (or use an automatic method here).",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    except (coinbasis.InsufficientLots, coinbasis.InsufficientTransfer,
+            coinbasis.MissingLotSelection, coinbasis.InvalidLotSelection) as exc:
+        print(f"Portfolio data error: {exc}", file=sys.stderr)
+        sys.exit(1)
+    except coinbasis.PortfolioError as exc:
+        print(f"Portfolio error: {exc}", file=sys.stderr)
+        sys.exit(1)
+    except cryptolytics.RateLimitedError as exc:
+        retry_msg = (f"; retry after {exc.retry_after}s"
+                     if getattr(exc, "retry_after", None) else "")
+        print(
+            f"Rate limited by CoinGecko and no cached prices available{retry_msg}.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    except cryptolytics.PriceSourceError as exc:
+        print(f"Failed to fetch prices from CoinGecko: {exc}", file=sys.stderr)
+        sys.exit(1)
+    except cryptolytics.StakingError as exc:
+        print(f"(staking APY API unavailable, falling back to manual: {exc})",
+              file=sys.stderr)
+    except cryptolytics.FeedError as exc:
+        print(f"(skipped feed: {exc})", file=sys.stderr)
+    except cryptolytics.CryptolyticsError as exc:
+        print(f"Data error: {exc}", file=sys.stderr)
+        sys.exit(1)
 
 
 def _build_ctx(args: argparse.Namespace) -> appconfig.AppContext:

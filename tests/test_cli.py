@@ -679,3 +679,53 @@ def test_tax_method_specific_without_select_exits(tmp_path, capsys, monkeypatch)
     assert exc_info.value.code == 1
     err = capsys.readouterr().err
     assert "--select" in err
+
+
+# ── Task 28: global error-map single catch site ──────────────────────────────
+
+def test_rate_limited_no_cache_exits_1(tmp_path, capsys, monkeypatch):
+    """PriceSourceError (no cache) → exit 1 + readable stderr."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("COINGECKO_API_KEY", raising=False)
+    _write_coinbasis_ledger(tmp_path / "ledger.json", [])
+
+    mock_portfolio = MagicMock()
+    mock_portfolio.holdings.return_value = [
+        coinbasis.Holding(asset="bitcoin", wallet="default",
+                          quantity=Decimal("1"), cost_basis=Decimal("50000"),
+                          average_cost=Decimal("50000"))
+    ]
+
+    with patch("coinbasis.Portfolio.from_transactions", return_value=mock_portfolio), \
+         patch("cryptolytics.CoinGeckoClient") as MockCl:
+        MockCl.return_value.prices.side_effect = cryptolytics.RateLimitedError(
+            "rate limited", url="https://api.coingecko.com", status=429)
+        with pytest.raises(SystemExit) as exc_info:
+            cpt.cli(["--data-dir", str(tmp_path), "prices"])
+
+    assert exc_info.value.code == 1
+    err = capsys.readouterr().err
+    assert "rate limit" in err.lower() or "429" in err
+
+
+def test_insufficient_lots_exits_1(tmp_path, capsys, monkeypatch):
+    """InsufficientLots → exit 1 + readable stderr."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("COINGECKO_API_KEY", raising=False)
+    _write_coinbasis_ledger(tmp_path / "ledger.json", [])
+
+    mock_portfolio = MagicMock()
+    from decimal import Decimal
+    mock_portfolio.holdings.side_effect = coinbasis.InsufficientLots(
+        asset="bitcoin", wallet="default",
+        attempted=Decimal("2"), available=Decimal("1"),
+    )
+
+    with patch("coinbasis.Portfolio.from_transactions", return_value=mock_portfolio), \
+         patch("cryptolytics.CoinGeckoClient"):
+        with pytest.raises(SystemExit) as exc_info:
+            cpt.cli(["--data-dir", str(tmp_path), "holdings"])
+
+    assert exc_info.value.code == 1
+    err = capsys.readouterr().err
+    assert "bitcoin" in err or "insufficient" in err.lower()
