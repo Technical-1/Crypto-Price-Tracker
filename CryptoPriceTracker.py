@@ -385,7 +385,7 @@ def run_valuation(ctx: appconfig.AppContext, args: argparse.Namespace) -> None:
     client = cryptolytics.CoinGeckoClient(ctx.cg_config)
     try:
         book = client.prices(asset_ids)
-    except cryptolytics.RateLimitedError as exc:
+    except cryptolytics.RateLimitedError:
         print("Rate limited by CoinGecko and no cached prices available.", file=sys.stderr)
         sys.exit(1)
     except cryptolytics.PriceSourceError as exc:
