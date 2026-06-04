@@ -352,15 +352,146 @@ def run_performance(ctx: appconfig.AppContext, args: argparse.Namespace) -> None
 
 
 def run_staking(ctx: appconfig.AppContext, args: argparse.Namespace) -> None:
-    raise NotImplementedError("run_staking: see plan-03 Task 22")
+    """staking command: effective APYs + projected yield + rewards summary."""
+    config = appio.load_staking_config(ctx.paths["staking"])
+    rewards = appio.load_rewards(ctx.paths["rewards"])
+
+    if not config:
+        print("No staking.json configured. See README for setup.", file=sys.stderr)
+        return
+
+    symbols = [v.get("symbol", k) for k, v in config.items()]
+    try:
+        api_apys = cryptolytics.fetch_apys(symbols)
+    except cryptolytics.StakingError as exc:
+        print(f"(staking APY API unavailable, falling back to manual: {exc})",
+              file=sys.stderr)
+        api_apys = {}
+
+    eff = cryptolytics.effective_apys(config, api_apys)
+    rewards_sum = cryptolytics.rewards_summary(rewards)
+    print(staking_report.format_staking(eff, rewards_sum, config))
 
 
 def run_news(ctx: appconfig.AppContext, args: argparse.Namespace) -> None:
-    raise NotImplementedError("run_news: see plan-03 Task 22")
+    """news command: RSS + CryptoPanic items with sentiment."""
+    coin_filter = getattr(args, "coin", None)
+    limit = getattr(args, "limit", 20)
+    news_cfg = appio.load_news_config(ctx.paths["news"])
+
+    all_items: list[dict] = []
+
+    token = news_cfg.get("cryptopanic_token")
+    if token:
+        currencies = [coin_filter] if coin_filter else list(
+            news_cfg.get("keywords", {}).keys())[:5]
+        try:
+            all_items += cryptolytics.fetch_cryptopanic(token, currencies)
+        except cryptolytics.FeedError as exc:
+            print(f"(skipped CryptoPanic: {exc})", file=sys.stderr)
+
+    for feed_url in news_cfg.get("feeds", cryptolytics.DEFAULT_FEEDS):
+        try:
+            all_items += cryptolytics.fetch_rss(feed_url)
+        except cryptolytics.FeedError as exc:
+            print(f"(skipped feed {feed_url}: {exc})", file=sys.stderr)
+
+    keywords_cfg = news_cfg.get("keywords", {})
+    coins_to_show = [coin_filter] if coin_filter else (list(keywords_cfg.keys())[:5] or ["bitcoin"])
+    for coin in coins_to_show:
+        keywords = cryptolytics.keywords_for(coin, keywords_cfg)
+        items = cryptolytics.filter_items(all_items, keywords)[:limit]
+        print(news_report.format_coin_news(coin, items))
 
 
 def run_history(ctx: appconfig.AppContext, args: argparse.Namespace) -> None:
-    raise NotImplementedError("run_history: see plan-03 Task 22")
+    """history command: reconstruct daily value series and render sparkline."""
+    import datetime as _dt
+    from datetime import timedelta
+
+    days = getattr(args, "days", 90)
+    date_filter = getattr(args, "date", None)
+    play = getattr(args, "play", False)
+
+    txs = appio.load_ledger(ctx.paths["ledger"],
+                            no_migrate=getattr(args, "no_migrate", False))
+    portfolio = coinbasis.Portfolio.from_transactions(txs)
+    holdings_list = portfolio.holdings(ctx.method)
+    coins = list({h.asset for h in holdings_list})
+
+    client = cryptolytics.CoinGeckoClient(ctx.cg_config)
+
+    price_by_coin_date: dict[str, dict[str, float]] = {}
+    for coin in coins:
+        try:
+            hist = client.history(coin, days)
+            price_by_coin_date[coin] = {pt.date: float(pt.price) for pt in hist}
+        except cryptolytics.CryptolyticsError as exc:
+            print(f"(skipped history for {coin}: {exc})", file=sys.stderr)
+
+    today = _dt.date.today()
+    today_str = today.isoformat()
+    dates = [(today - timedelta(days=d)).isoformat() for d in range(days, -1, -1)]
+
+    # Single-date snapshot detail
+    if date_filter:
+        snap_holdings = cryptolytics.history.holdings_as_of(txs, date_filter, ctx.method)
+        snap_rows = []
+        total_value = 0.0
+        total_cost = 0.0
+        for h in snap_holdings:
+            day_price = price_by_coin_date.get(h.asset, {}).get(date_filter, 0.0)
+            qty = float(h.quantity)
+            val = qty * day_price
+            cost = float(h.cost_basis)
+            total_value += val
+            total_cost += cost
+            snap_rows.append({
+                "coin": h.asset, "qty": qty, "price": day_price,
+                "value": val, "pl": val - cost,
+            })
+        snap = cryptolytics.Snapshot(
+            date=date_filter,
+            total_value=total_value,
+            cost=total_cost,
+            pl=total_value - total_cost,
+        )
+        print(history_report.format_snapshot(snap, snap_rows))
+        return
+
+    series = cryptolytics.history.reconstruct_series(
+        txs, price_by_coin_date, dates, ctx.method)
+
+    # News markers (best-effort)
+    news_cfg = appio.load_news_config(ctx.paths["news"])
+    news_markers: dict[str, str] = {}
+    for feed_url in news_cfg.get("feeds", [])[:1]:
+        try:
+            items = cryptolytics.fetch_rss(feed_url)
+            for it in items:
+                pub = it.get("published", "")
+                if pub and dates and pub >= dates[0]:
+                    news_markers[pub] = it.get("title", "")[:50]
+        except cryptolytics.FeedError:
+            pass
+
+    if play:
+        print(history_report.format_playback(series))
+    else:
+        print(history_report.format_chart(series, news_markers))
+
+    # Append today's snapshot
+    today_pt = next((pt for pt in reversed(series) if pt["date"] == today_str), None)
+    if today_pt:
+        snap = cryptolytics.Snapshot(
+            date=today_str,
+            total_value=today_pt["value"],
+            cost=today_pt["cost"],
+            pl=today_pt["pl"],
+        )
+        loaded = appio.load_snapshots(ctx.paths["snapshots"])
+        updated = cryptolytics.dedup_append(loaded, snap)
+        appio.save_snapshots(ctx.paths["snapshots"], updated)
 
 
 def _run_add(ctx: appconfig.AppContext) -> None:

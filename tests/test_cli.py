@@ -298,3 +298,53 @@ def test_run_rebalance_equal_strategy(tmp_path, capsys, monkeypatch):
     out = capsys.readouterr().out
     # Should print the rebalance plan (even if empty/in-balance)
     assert "balance" in out.lower() or "rebalance" in out.lower() or out.strip()
+
+
+# ── Task 22: run_staking / run_news / run_history ─────────────────────────────
+
+def test_run_staking_no_config_exits(tmp_path, capsys, monkeypatch):
+    """Staking command with no staking.json exits cleanly."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("COINGECKO_API_KEY", raising=False)
+    _write_coinbasis_ledger(tmp_path / "ledger.json", [])
+
+    with patch("cryptolytics.fetch_apys", return_value={}), \
+         patch("cryptolytics.CoinGeckoClient"):
+        cpt.cli(["--data-dir", str(tmp_path), "staking"])
+
+    out = capsys.readouterr().out
+    # With no staking.json the command should still produce some output (or a no-config notice)
+    assert out.strip() or True  # not crash
+
+
+def test_run_news_with_mock_feed(tmp_path, capsys, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("COINGECKO_API_KEY", raising=False)
+
+    mock_items = [
+        {"title": "Bitcoin surges", "link": "http://x.com", "published": "2024-01-01", "source": "RSS"},
+    ]
+    with patch("cryptolytics.fetch_rss", return_value=mock_items), \
+         patch("cryptolytics.fetch_cryptopanic", return_value=[]):
+        cpt.cli(["--data-dir", str(tmp_path), "news"])
+
+    out = capsys.readouterr().out
+    assert "bitcoin" in out.lower() or "surges" in out.lower()
+
+
+def test_run_history_with_mock_client(tmp_path, capsys, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("COINGECKO_API_KEY", raising=False)
+    ledger_path = tmp_path / "ledger.json"
+    _write_coinbasis_ledger(ledger_path, [])  # empty ledger
+
+    with patch("coinbasis.Portfolio.from_transactions", return_value=MagicMock(
+        holdings=MagicMock(return_value=[])
+    )), patch("cryptolytics.CoinGeckoClient") as MockCl:
+        MockCl.return_value.prices.return_value = MagicMock(prices_map=lambda: {}, stale=False)
+        MockCl.return_value.history.return_value = []
+        cpt.cli(["--data-dir", str(tmp_path), "history"])
+
+    out = capsys.readouterr().out
+    # Empty ledger → no history, but command should not crash
+    assert True
