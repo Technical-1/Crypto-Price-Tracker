@@ -11,7 +11,6 @@ from datetime import datetime, timezone
 
 import appconfig
 import coinbasis
-import cryptolytics
 import CryptoPriceTracker as cpt
 
 
@@ -340,11 +339,13 @@ def test_run_history_with_mock_client(tmp_path, capsys, monkeypatch):
 
     with patch("coinbasis.Portfolio.from_transactions", return_value=MagicMock(
         holdings=MagicMock(return_value=[])
-    )), patch("cryptolytics.CoinGeckoClient") as MockCl:
+    )), patch("cryptolytics.CoinGeckoClient") as MockCl, \
+         patch("cryptolytics.fetch_rss", return_value=[]), \
+         patch("cryptolytics.fetch_cryptopanic", return_value=[]):
         MockCl.return_value.prices.return_value = MagicMock(prices_map=lambda: {}, stale=False)
         MockCl.return_value.history.return_value = []
         cpt.cli(["--data-dir", str(tmp_path), "history"])
 
-    out = capsys.readouterr().out
+    capsys.readouterr()
     # Empty ledger → no history, but command should not crash
     assert True
