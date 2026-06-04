@@ -489,7 +489,55 @@ def run_rebalance(ctx: appconfig.AppContext, args: argparse.Namespace) -> None:
 
 
 def run_performance(ctx: appconfig.AppContext, args: argparse.Namespace) -> None:
-    raise NotImplementedError("run_performance: see plan-04 Task 26")
+    """performance command: build snapshot, compute metrics, render sparkline."""
+    import datetime as _dt
+
+    risk_free = getattr(args, "risk_free", 0.0)
+
+    txs = appio.load_ledger(ctx.paths["ledger"],
+                            no_migrate=getattr(args, "no_migrate", False))
+    portfolio = coinbasis.Portfolio.from_transactions(txs) if txs is not None else None
+
+    client = cryptolytics.CoinGeckoClient(ctx.cg_config)
+
+    # Get current valuation
+    prices_map: dict = {}
+    if portfolio:
+        try:
+            holdings_list = portfolio.holdings(ctx.method)
+            asset_ids = list({h.asset for h in holdings_list})
+            if asset_ids:
+                book = client.prices(asset_ids)
+                if book.stale:
+                    print("(showing last-good prices)", file=sys.stderr)
+                prices_map = book.prices_map()
+        except cryptolytics.CryptolyticsError as exc:
+            print(f"(price fetch failed: {exc})", file=sys.stderr)
+
+    if portfolio and prices_map:
+        valuation = portfolio.valuation(ctx.method, prices_map)
+    elif portfolio:
+        # valuation with empty prices → all holdings in missing_prices
+        valuation = portfolio.valuation(ctx.method, {})
+    else:
+        valuation = None
+
+    today_str = _dt.date.today().isoformat()
+
+    # Build today's snapshot
+    if valuation is not None:
+        snap = cryptolytics.perf.build_snapshot(valuation, today_str)
+    else:
+        snap = cryptolytics.Snapshot(date=today_str, total_value=0.0, cost=0.0, pl=0.0)
+
+    # Load history, dedup-append, save
+    history = appio.load_snapshots(ctx.paths["snapshots"])
+    updated_history = cryptolytics.perf.dedup_append(history, snap)
+    appio.save_snapshots(ctx.paths["snapshots"], updated_history)
+
+    # Compute metrics
+    metrics = cryptolytics.perf.metrics(updated_history, risk_free=risk_free)
+    print(perf_report.format_performance(updated_history, metrics))
 
 
 def run_staking(ctx: appconfig.AppContext, args: argparse.Namespace) -> None:

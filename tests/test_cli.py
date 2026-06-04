@@ -582,3 +582,47 @@ def test_run_valuation_renders_headline(tmp_path, capsys, monkeypatch):
     assert "bitcoin" in out
     assert "60000" in out
     assert "20.00" in out or "20%" in out or "0.2" in out
+
+
+# ── Task 26: run_performance ──────────────────────────────────────────────────
+
+def test_run_performance_builds_snapshot(tmp_path, capsys, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("COINGECKO_API_KEY", raising=False)
+    ledger_path = tmp_path / "ledger.json"
+    _write_coinbasis_ledger(ledger_path, [])
+
+    mock_portfolio = MagicMock()
+    mock_portfolio.holdings.return_value = []
+    mock_valuation = MagicMock()
+    mock_valuation.total_cost = Decimal("0")
+    mock_valuation.total_value = Decimal("0")
+    mock_valuation.total_unrealized = Decimal("0")
+    mock_valuation.total_return = Decimal("0")
+    mock_valuation.assets = []
+    mock_valuation.missing_prices = []
+    mock_portfolio.valuation.return_value = mock_valuation
+
+    mock_book = MagicMock()
+    mock_book.prices_map.return_value = {}
+    mock_book.stale = False
+
+    with patch("coinbasis.Portfolio.from_transactions", return_value=mock_portfolio), \
+         patch("cryptolytics.CoinGeckoClient") as MockCl, \
+         patch("cryptolytics.perf.build_snapshot") as mock_build_snap, \
+         patch("cryptolytics.perf.dedup_append") as mock_dedup, \
+         patch("cryptolytics.perf.metrics") as mock_metrics:
+        MockCl.return_value.prices.return_value = mock_book
+        mock_snap = cryptolytics.Snapshot("2024-01-01", 0.0, 0.0, 0.0)
+        mock_build_snap.return_value = mock_snap
+        mock_dedup.return_value = [mock_snap]
+        mock_metrics.return_value = cryptolytics.PerfMetrics(
+            volatility=None, sharpe=None, max_drawdown=None,
+            cumulative_return=None, period_returns=[])
+        cpt.cli(["--data-dir", str(tmp_path), "performance"])
+
+    out = capsys.readouterr().out
+    # Should render perf view without crashing
+    assert "performance" in out.lower() or "history" in out.lower() or out.strip()
+    # Check build_snapshot was called
+    mock_build_snap.assert_called_once()
