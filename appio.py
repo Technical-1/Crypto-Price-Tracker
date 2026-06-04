@@ -322,3 +322,41 @@ def load_news_config(path: str) -> dict:
     except (json.JSONDecodeError, OSError) as exc:
         print(f"(news.json invalid: {exc}; using defaults)", file=sys.stderr)
         return defaults
+
+
+def load_snapshots(path: str) -> list[_cl.Snapshot]:
+    """Read snapshots.jsonl → list[cryptolytics.Snapshot].  Returns [] if absent."""
+    if not os.path.exists(path):
+        return []
+    snaps: list[_cl.Snapshot] = []
+    try:
+        with open(path) as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                d = json.loads(line)
+                snaps.append(_cl.Snapshot(
+                    date=d["date"],
+                    total_value=float(d["total_value"]),
+                    cost=float(d["cost"]),
+                    pl=float(d["pl"]),
+                ))
+    except (OSError, json.JSONDecodeError, KeyError, ValueError) as exc:
+        print(f"(snapshots.jsonl unreadable: {exc})", file=sys.stderr)
+        return []
+    return snaps
+
+
+def save_snapshots(path: str, snaps: list[_cl.Snapshot]) -> None:
+    """Atomically rewrite snapshots.jsonl."""
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        for s in snaps:
+            f.write(json.dumps({
+                "date": s.date,
+                "total_value": s.total_value,
+                "cost": s.cost,
+                "pl": s.pl,
+            }) + "\n")
+    os.replace(tmp, path)

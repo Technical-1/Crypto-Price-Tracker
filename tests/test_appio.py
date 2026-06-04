@@ -279,3 +279,31 @@ def test_load_rewards_csv(tmp_path):
     assert len(rewards) == 1
     assert rewards[0]["coin"] == "ethereum"
     assert rewards[0]["quantity"] == "0.5"
+
+
+def test_snapshots_round_trip(tmp_path):
+    path = str(tmp_path / "snapshots.jsonl")
+    snap1 = cryptolytics.Snapshot(date="2024-01-01", total_value=1000.0, cost=800.0, pl=200.0)
+    snap2 = cryptolytics.Snapshot(date="2024-01-02", total_value=1100.0, cost=800.0, pl=300.0)
+
+    appio.save_snapshots(path, [snap1, snap2])
+    loaded = appio.load_snapshots(path)
+
+    assert len(loaded) == 2
+    assert loaded[0] == snap1
+    assert loaded[1] == snap2
+
+
+def test_load_snapshots_missing_returns_empty(tmp_path):
+    result = appio.load_snapshots(str(tmp_path / "snapshots.jsonl"))
+    assert result == []
+
+
+def test_save_snapshots_is_atomic(tmp_path):
+    """save_snapshots should not leave a corrupt file on success."""
+    path = str(tmp_path / "snapshots.jsonl")
+    snaps = [cryptolytics.Snapshot(date="2024-01-01", total_value=500.0, cost=400.0, pl=100.0)]
+    appio.save_snapshots(path, snaps)
+    assert os.path.exists(path)
+    loaded = appio.load_snapshots(path)
+    assert loaded == snaps
