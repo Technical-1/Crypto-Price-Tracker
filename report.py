@@ -93,7 +93,7 @@ def format_prices(
     book: "cryptolytics.PriceBook",
     sparklines: dict[str, list[float]] | None = None,
 ) -> str:
-    """Prices view (V2 view 1): COIN · PRICE · 24H% · 7D% · HELD · COST · VALUE · PROFIT · ALLOC%."""
+    """Prices view: COIN · PRICE · 24H% · 7D% · HELD · COST · VALUE · PROFIT · ALLOC%."""
     spark_map = sparklines if sparklines is not None else book.sparklines
     lines = []
     header = (

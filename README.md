@@ -54,7 +54,7 @@ holdings are derived from it automatically. Otherwise the built-in `originalHold
 dictionary is used — edit the `total` and `cost` values there to match your own holdings.
 Add more coins by extending the dictionary and the request URL.
 
-## New Commands (V2 View Parity)
+## Commands
 
 | Command | Description |
 |---|---|
