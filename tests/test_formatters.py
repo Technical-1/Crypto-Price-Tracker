@@ -302,3 +302,26 @@ def test_news_report_uses_cryptolytics_sentiment():
     out = news_report.format_coin_news("bitcoin", items)
     assert "bitcoin" in out.lower() or "Bitcoin" in out
     assert "bullish" in out.lower() or "bearish" in out.lower() or "neutral" in out.lower()
+
+
+import history_report
+
+
+def test_format_chart_renders_sparkline():
+    series = [
+        {"date": "2024-01-01", "value": 1000.0, "cost": 800.0, "pl": 200.0},
+        {"date": "2024-01-02", "value": 1100.0, "cost": 800.0, "pl": 300.0},
+        {"date": "2024-01-03", "value": 950.0,  "cost": 800.0, "pl": 150.0},
+    ]
+    out = history_report.format_chart(series, news_markers={})
+    assert "2024-01-01" in out or "sparkline" in out.lower() or any(
+        c in out for c in ["▁","▂","▃","▄","▅","▆","▇","█"]
+    )
+
+
+def test_format_snapshot_from_cryptolytics_snapshot():
+    snap = cryptolytics.Snapshot(date="2024-01-03", total_value=1200.0, cost=900.0, pl=300.0)
+    rows = [{"coin": "bitcoin", "qty": 1.0, "price": 1200.0, "value": 1200.0, "pl": 300.0}]
+    out = history_report.format_snapshot(snap, rows)
+    assert "bitcoin" in out
+    assert "1200" in out

@@ -1,47 +1,49 @@
 # history_report.py
-import chart
+import chart as _chart
+import cryptolytics
 
 
-def format_chart(series):
-    """Render value + P/L sparklines and a start/end/min/max/delta summary."""
+def format_chart(series: list[dict], news_markers: dict) -> str:
+    """Render a sparkline of daily portfolio values."""
     if not series:
-        return "Portfolio history: (no data)"
-    values = [p["value"] for p in series]
-    pls = [p["pl"] for p in series]
-    start, end = series[0], series[-1]
+        return "No history data.\n"
+    values = [pt["value"] for pt in series]
+    spark = _chart.sparkline(values)
+    lines = [f"Portfolio Value ({len(series)} days):", f"  {spark}"]
+    for pt in series:
+        marker = "*" if pt["date"] in news_markers else " "
+        lines.append(
+            f"  {marker} {pt['date']}  ${pt['value']:>10,.2f}  "
+            f"P/L: ${pt['pl']:>+10,.2f}"
+        )
+    return "\n".join(lines) + "\n"
+
+
+def format_playback(series: list[dict]) -> str:
+    """Day-by-day playback view."""
+    lines = ["Historical Playback"]
+    for pt in series:
+        lines.append(
+            f"  {pt['date']}  value=${pt['value']:>10,.2f}  "
+            f"cost=${pt['cost']:>10,.2f}  pl=${pt['pl']:>+10,.2f}"
+        )
+    return "\n".join(lines) + "\n"
+
+
+def format_snapshot(snap: cryptolytics.Snapshot, rows: list[dict]) -> str:
+    """Single-day snapshot detail view."""
     lines = [
-        "Portfolio history (%s to %s):" % (start["date"], end["date"]),
-        "  Value  %s" % chart.sparkline(values),
-        "  P/L    %s" % chart.sparkline(pls),
-        "  Start: %.2f   End: %.2f   Min: %.2f   Max: %.2f   Delta: %.2f" % (
-            start["value"], end["value"], min(values), max(values),
-            end["value"] - start["value"]),
-    ]
-    return "\n".join(lines)
-
-
-def format_playback(series, news_dates):
-    """One line per day: date, value, pl, a P/L bar, and a '*' on news days."""
-    if not series:
-        return "Portfolio history: (no data)"
-    max_abs = max((abs(p["pl"]) for p in series), default=0.0)
-    lines = ["Playback:"]
-    for p in series:
-        marker = " *" if p["date"] in news_dates else ""
-        lines.append("  %s  value %10.2f  pl %10.2f  %s%s" % (
-            p["date"], p["value"], p["pl"], chart.hbar(p["pl"], max_abs, 20), marker))
-    return "\n".join(lines)
-
-
-def format_snapshot(date, rows, total_value, total_pl):
-    """Per-coin breakdown for a single day with the day totals."""
-    lines = [
-        "Snapshot %s:" % date,
-        "      Coin          Qty         Price        Value         P/L",
-        "  ------------   ----------   ----------   ----------   ----------",
+        f"Snapshot: {snap.date}",
+        f"  Total value: ${snap.total_value:>12,.2f}",
+        f"  Cost:        ${snap.cost:>12,.2f}",
+        f"  P/L:         ${snap.pl:>+12,.2f}",
+        "",
+        f"  {'Coin':<12} {'Qty':>10} {'Price':>12} {'Value':>12} {'P/L':>12}",
+        "  " + "-" * 60,
     ]
     for r in rows:
-        lines.append("  %-12s   %10.4f   %10.2f   %10.2f   %10.2f" % (
-            r["coin"], r["qty"], r["price"], r["value"], r["pl"]))
-    lines.append("  Total value: %.2f   Total P/L: %.2f" % (total_value, total_pl))
-    return "\n".join(lines)
+        lines.append(
+            f"  {r['coin']:<12} {float(r['qty']):>10.4f} {float(r['price']):>12.2f} "
+            f"{float(r['value']):>12.2f} {float(r['pl']):>+12.2f}"
+        )
+    return "\n".join(lines) + "\n"
