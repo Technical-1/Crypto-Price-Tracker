@@ -360,3 +360,85 @@ def save_snapshots(path: str, snaps: list[_cl.Snapshot]) -> None:
                 "pl": s.pl,
             }) + "\n")
     os.replace(tmp, path)
+
+
+def import_csv(csv_path: str, ledger_path: str) -> None:
+    """Import transactions from CSV into ledger.json.
+
+    Accepts V1 columns (date, coin, action, quantity, price_usd, fee_usd) and
+    extended columns (wallet, plus event-specific fields).
+    Deduplicates exact matches against existing entries.
+    Skips invalid rows with a stderr notice.
+    """
+    if not os.path.exists(csv_path):
+        print(f"CSV file not found: {csv_path}", file=sys.stderr)
+        sys.exit(1)
+
+    # Load existing ledger (may trigger migration if V1)
+    try:
+        existing = load_ledger(ledger_path) if os.path.exists(ledger_path) else []
+    except SystemExit:
+        existing = []
+
+    try:
+        with open(csv_path, newline="") as f:
+            reader = _csv.DictReader(f)
+            csv_rows = list(reader)
+    except OSError as exc:
+        print(f"Cannot read CSV {csv_path}: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    new_txs: list[coinbasis.Transaction] = []
+    skipped = 0
+    for i, row in enumerate(csv_rows, start=2):  # 1-based header + 1-based data
+        try:
+            tx = _csv_row_to_tx(row)
+            if tx is None:
+                continue
+            tx.validate()
+            # Dedup: skip if an identical tx is already in existing + new_txs
+            if tx in existing or tx in new_txs:
+                continue
+            new_txs.append(tx)
+        except (coinbasis.PortfolioError, KeyError, ValueError, TypeError) as exc:
+            print(f"(skipped CSV line {i}: {exc})", file=sys.stderr)
+            skipped += 1
+
+    all_txs = existing + new_txs
+    save_ledger(ledger_path, all_txs)
+
+    added = len(new_txs)
+    print(f"Imported {added} transaction(s){f'; skipped {skipped} invalid row(s)' if skipped else ''}.")
+
+
+def _csv_row_to_tx(row: dict) -> Optional[coinbasis.Transaction]:
+    """Convert one CSV row dict to a coinbasis Transaction.  Returns None if the
+    action type is unrecognised but not invalid (e.g. future extended types not
+    yet handled).  Raises on field errors so the caller can print a skip notice."""
+    action = str(row.get("action", "")).lower().strip()
+    wallet = str(row.get("wallet", DEFAULT_WALLET)) or DEFAULT_WALLET
+    ts = _utc_midnight(str(row["date"]).strip())
+    asset = str(row["coin"]).strip()
+    qty = Decimal(str(row["quantity"]).strip())
+    price = Decimal(str(row.get("price_usd", "0")).strip())
+    fee = Decimal(str(row.get("fee_usd", "0")).strip())
+
+    if action == "buy":
+        return coinbasis.Buy(timestamp=ts, wallet=wallet, asset=asset,
+                             quantity=qty, unit_price=price, fee=fee)
+    elif action == "sell":
+        return coinbasis.Sell(timestamp=ts, wallet=wallet, asset=asset,
+                              quantity=qty, unit_price=price, fee=fee)
+    # Extended actions: income, spend, trade, transfer, gift_sent, gift_received
+    elif action == "income":
+        value = Decimal(str(row.get("value", qty * price)).strip())
+        source_str = str(row.get("source", "Other")).strip()
+        try:
+            source = coinbasis.IncomeSource(source_str)
+        except ValueError:
+            source = coinbasis.IncomeSource.OTHER
+        return coinbasis.Income(timestamp=ts, wallet=wallet, asset=asset,
+                                quantity=qty, value=value, source=source)
+    else:
+        # Unknown action: skip quietly (could be a comment row or future type)
+        return None

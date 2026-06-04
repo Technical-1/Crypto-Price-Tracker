@@ -307,3 +307,76 @@ def test_save_snapshots_is_atomic(tmp_path):
     assert os.path.exists(path)
     loaded = appio.load_snapshots(path)
     assert loaded == snaps
+
+
+def _write_csv(path, rows, headers=None):
+    """Write a list-of-dicts CSV."""
+    if not rows:
+        return
+    hdrs = headers or list(rows[0].keys())
+    with open(path, "w", newline="") as f:
+        writer = _csv.DictWriter(f, fieldnames=hdrs)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def test_import_csv_v1_columns(tmp_path):
+    csv_path = tmp_path / "import.csv"
+    ledger_path = tmp_path / "ledger.json"
+    _write_json(ledger_path, [])  # empty coinbasis ledger
+
+    rows = [
+        {"date": "2024-01-01", "coin": "bitcoin", "action": "buy",
+         "quantity": "1.0", "price_usd": "50000", "fee_usd": "0"},
+    ]
+    _write_csv(csv_path, rows)
+
+    appio.import_csv(str(csv_path), str(ledger_path))
+
+    txs = appio.load_ledger(str(ledger_path))
+    assert len(txs) == 1
+    assert isinstance(txs[0], coinbasis.Buy)
+    assert txs[0].asset == "bitcoin"
+
+
+def test_import_csv_deduplicates(tmp_path):
+    csv_path = tmp_path / "import.csv"
+    ledger_path = tmp_path / "ledger.json"
+    _write_json(ledger_path, [])
+
+    rows = [{"date": "2024-01-01", "coin": "bitcoin", "action": "buy",
+             "quantity": "1.0", "price_usd": "50000", "fee_usd": "0"}]
+    _write_csv(csv_path, rows)
+
+    appio.import_csv(str(csv_path), str(ledger_path))
+    # Import again — same data → dedup, still 1 tx
+    appio.import_csv(str(csv_path), str(ledger_path))
+
+    txs = appio.load_ledger(str(ledger_path))
+    assert len(txs) == 1
+
+
+def test_import_csv_skips_invalid_rows(tmp_path, capsys):
+    csv_path = tmp_path / "import.csv"
+    ledger_path = tmp_path / "ledger.json"
+    _write_json(ledger_path, [])
+
+    rows = [
+        {"date": "2024-01-01", "coin": "bitcoin", "action": "buy",
+         "quantity": "-5.0", "price_usd": "50000", "fee_usd": "0"},  # invalid qty
+        {"date": "2024-01-02", "coin": "bitcoin", "action": "buy",
+         "quantity": "1.0", "price_usd": "50000", "fee_usd": "0"},   # valid
+    ]
+    _write_csv(csv_path, rows)
+    appio.import_csv(str(csv_path), str(ledger_path))
+
+    txs = appio.load_ledger(str(ledger_path))
+    assert len(txs) == 1  # only the valid row
+    err = capsys.readouterr().err
+    assert "skipped CSV line" in err
+
+
+def test_import_csv_missing_file_exits(tmp_path):
+    with pytest.raises(SystemExit) as exc_info:
+        appio.import_csv(str(tmp_path / "missing.csv"), str(tmp_path / "ledger.json"))
+    assert exc_info.value.code == 1
