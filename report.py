@@ -49,3 +49,38 @@ def format_realized(rows: list[coinbasis.RealizedGain]) -> str:
     total = short_gain + long_gain + other_gain
     lines.append(f"  Total gain:      ${float(total):>12.2f}")
     return "\n".join(lines) + "\n"
+
+
+def format_unrealized(portfolio_report: coinbasis.PortfolioReport) -> str:
+    """Render unrealized P/L from a coinbasis PortfolioReport."""
+    lines = ["Unrealized P/L"]
+    header = (
+        f"{'Asset':<12} {'Qty':>10} {'Cost Basis':>12} "
+        f"{'Market Val':>12} {'Unrealized':>12} {'Alloc':>8}"
+    )
+    lines.append(header)
+    lines.append("-" * len(header))
+
+    for av in portfolio_report.assets:
+        alloc_pct = float(av.allocation) * 100
+        line = (
+            f"{av.asset:<12} {float(av.quantity):>10.4f} "
+            f"{float(av.cost_basis):>12.2f} {float(av.market_value):>12.2f} "
+            f"{float(av.unrealized):>12.2f} {alloc_pct:>7.1f}%"
+        )
+        lines.append(line)
+
+    lines.append("-" * len(header))
+    lines.append(
+        f"{'Total':<12} {'':>10} {float(portfolio_report.total_cost):>12.2f} "
+        f"{float(portfolio_report.total_value):>12.2f} "
+        f"{float(portfolio_report.total_unrealized):>12.2f} {'':>8}"
+    )
+    ret_pct = float(portfolio_report.total_return) * 100
+    lines.append(f"  Total return: {ret_pct:+.2f}%")
+
+    if portfolio_report.missing_prices:
+        missing_str = ", ".join(portfolio_report.missing_prices)
+        lines.append(f"  (no price data for: {missing_str})")
+
+    return "\n".join(lines) + "\n"
