@@ -113,3 +113,48 @@ def test_parser_method_choices():
     for m in ["fifo", "lifo", "hifo", "average", "specific"]:
         args = parser.parse_args(["tax", "--method", m])
         assert args.method == m
+
+
+# ── Task 19: import / add / migrate dispatch ──────────────────────────────────
+
+def test_import_csv_calls_appio(tmp_path, monkeypatch):
+    """cli(['import', path]) delegates to appio.import_csv."""
+    csv_path = tmp_path / "data.csv"
+    ledger_path = tmp_path / "ledger.json"
+    # Write empty coinbasis ledger
+    with open(ledger_path, "w") as f:
+        json.dump([], f)
+    # Write minimal V1 CSV
+    csv_path.write_text("date,coin,action,quantity,price_usd,fee_usd\n"
+                        "2024-01-01,bitcoin,buy,1.0,50000,0\n")
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("COINGECKO_API_KEY", raising=False)
+    cpt.cli(["import", str(csv_path)])
+
+    import appio
+    txs = appio.load_ledger(str(ledger_path))
+    assert len(txs) == 1
+
+
+def test_import_missing_csv_exits_with_error(tmp_path, capsys, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("COINGECKO_API_KEY", raising=False)
+    with pytest.raises(SystemExit) as exc_info:
+        cpt.cli(["import", str(tmp_path / "nonexistent.csv")])
+    assert exc_info.value.code == 1
+    err = capsys.readouterr().err
+    assert "not found" in err.lower() or "CSV" in err
+
+
+def test_migrate_command_via_cli(tmp_path, capsys, monkeypatch):
+    ledger_path = tmp_path / "ledger.json"
+    with open(ledger_path, "w") as f:
+        json.dump([
+            {"date": "2024-01-01", "coin": "bitcoin", "action": "buy",
+             "quantity": 1.0, "price_usd": 50000.0, "fee_usd": 0.0}
+        ], f)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("COINGECKO_API_KEY", raising=False)
+    cpt.cli(["migrate"])
+    assert os.path.exists(str(ledger_path) + ".v1.bak")

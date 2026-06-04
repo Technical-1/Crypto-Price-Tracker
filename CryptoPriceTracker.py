@@ -229,7 +229,49 @@ def run_history(ctx: appconfig.AppContext, args: argparse.Namespace) -> None:
 
 
 def _run_add(ctx: appconfig.AppContext) -> None:
-    raise NotImplementedError("add: see plan-03 Task 19")
+    """Interactive transaction entry."""
+    import os
+    from decimal import Decimal
+
+    action = input("Action (buy/sell/income): ").strip().lower()
+    date_str = input("Date (YYYY-MM-DD): ").strip()
+    asset = input("Asset (e.g. bitcoin): ").strip()
+    wallet = input("Wallet [default]: ").strip() or "default"
+    qty_str = input("Quantity: ").strip()
+    price_str = input("Price USD: ").strip()
+    fee_str = input("Fee USD [0]: ").strip() or "0"
+
+    ts = appio._utc_midnight(date_str)
+    qty = Decimal(qty_str)
+    price = Decimal(price_str)
+    fee = Decimal(fee_str)
+
+    try:
+        if action == "buy":
+            tx: coinbasis.Transaction = coinbasis.Buy(
+                timestamp=ts, wallet=wallet, asset=asset,
+                quantity=qty, unit_price=price, fee=fee)
+        elif action == "sell":
+            tx = coinbasis.Sell(
+                timestamp=ts, wallet=wallet, asset=asset,
+                quantity=qty, unit_price=price, fee=fee)
+        elif action == "income":
+            value = qty * price
+            tx = coinbasis.Income(
+                timestamp=ts, wallet=wallet, asset=asset,
+                quantity=qty, value=value, source=coinbasis.IncomeSource.OTHER)
+        else:
+            print(f"Unknown action '{action}'.", file=sys.stderr)
+            sys.exit(1)
+        tx.validate()
+    except (coinbasis.PortfolioError, ValueError) as exc:
+        print(f"Invalid transaction: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    ledger_path = ctx.paths["ledger"]
+    existing = appio.load_ledger(ledger_path) if os.path.exists(ledger_path) else []
+    appio.save_ledger(ledger_path, existing + [tx])
+    print(f"Added {action} {qty} {asset}.")
 
 
 if __name__ == "__main__":
