@@ -20,3 +20,7 @@ news.json
 
 # Runtime portfolio snapshots (appended by the history subcommand)
 snapshots.jsonl
+.venv/
+dist/
+build/
+*.egg-info/
