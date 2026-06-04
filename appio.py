@@ -166,6 +166,29 @@ def migrate_v1_ledger(rows: list[dict]) -> list[coinbasis.Transaction]:
     return txs
 
 
+def _auto_migrate(path: str, v1_rows: list[dict]) -> list[coinbasis.Transaction]:
+    """Upgrade a V1 ledger in-place:
+    1. Write .v1.bak (only if absent).
+    2. Convert rows with migrate_v1_ledger.
+    3. Rewrite ledger.json in coinbasis schema.
+    4. Print a migration notice to stderr.
+    """
+    bak_path = path + ".v1.bak"
+    if not os.path.exists(bak_path):
+        with open(bak_path, "w") as f:
+            json.dump(v1_rows, f, indent=2)
+
+    txs = migrate_v1_ledger(v1_rows)
+    save_ledger(path, txs)
+
+    print(
+        f"(migrated {os.path.basename(path)} from the legacy format to the "
+        f"multi-wallet schema; backup at {os.path.basename(bak_path)})",
+        file=sys.stderr,
+    )
+    return txs
+
+
 def save_ledger(path: str, txs: list[coinbasis.Transaction]) -> None:
     """Atomically overwrite ledger.json with the coinbasis schema."""
     tmp = path + ".tmp"

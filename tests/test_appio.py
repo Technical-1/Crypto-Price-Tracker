@@ -121,3 +121,69 @@ def test_v1_schema_detection():
     assert appio._is_coinbasis_schema(v1_rows) is False
     assert appio._is_coinbasis_schema(coinbasis_rows) is True
     assert appio._is_v1_schema(coinbasis_rows) is False
+
+
+def test_auto_migrate_rewrites_ledger_and_creates_backup(tmp_path, capsys):
+    ledger_path = tmp_path / "ledger.json"
+    v1_data = [{"date": "2024-01-01", "coin": "bitcoin", "action": "buy",
+                "quantity": 1.0, "price_usd": 50000.0, "fee_usd": 0.0}]
+    _write_json(ledger_path, v1_data)
+
+    txs = appio.load_ledger(str(ledger_path))
+
+    # Returns the converted transactions
+    assert len(txs) == 1
+    assert isinstance(txs[0], coinbasis.Buy)
+
+    # Backup was created
+    bak_path = str(ledger_path) + ".v1.bak"
+    assert os.path.exists(bak_path)
+    with open(bak_path) as f:
+        bak = json.load(f)
+    assert bak == v1_data  # original V1 content
+
+    # Rewritten file is now in coinbasis schema
+    with open(ledger_path) as f:
+        rewritten = json.load(f)
+    assert len(rewritten) == 1
+    assert "Buy" in rewritten[0]
+
+    # Stderr contains the migration notice
+    err = capsys.readouterr().err
+    assert "migrated" in err
+    assert ".v1.bak" in err
+
+
+def test_auto_migrate_does_not_overwrite_existing_backup(tmp_path, capsys):
+    ledger_path = tmp_path / "ledger.json"
+    bak_path = str(ledger_path) + ".v1.bak"
+    v1_data = [{"date": "2024-01-01", "coin": "bitcoin", "action": "buy",
+                "quantity": 1.0, "price_usd": 50000.0, "fee_usd": 0.0}]
+    _write_json(ledger_path, v1_data)
+    # Pre-existing backup with different content
+    with open(bak_path, "w") as f:
+        f.write("existing backup")
+
+    appio.load_ledger(str(ledger_path))
+
+    # Backup is not overwritten
+    with open(bak_path) as f:
+        assert f.read() == "existing backup"
+
+
+def test_load_ledger_idempotent_after_migration(tmp_path, capsys):
+    """Loading an already-migrated coinbasis ledger does not re-migrate it."""
+    ledger_path = tmp_path / "ledger.json"
+    v1_data = [{"date": "2024-01-01", "coin": "bitcoin", "action": "buy",
+                "quantity": 1.0, "price_usd": 50000.0, "fee_usd": 0.0}]
+    _write_json(ledger_path, v1_data)
+
+    # First load: migrates
+    appio.load_ledger(str(ledger_path))
+    capsys.readouterr()  # consume
+
+    # Second load: no migration, no notice
+    txs2 = appio.load_ledger(str(ledger_path))
+    err2 = capsys.readouterr().err
+    assert "migrated" not in err2
+    assert len(txs2) == 1
