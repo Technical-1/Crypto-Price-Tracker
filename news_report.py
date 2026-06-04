@@ -1,20 +1,17 @@
 # news_report.py
-import news
+import cryptolytics.news as _cn
 
 
-def format_coin_news(coin, items, summary, limit=5):
-    """Render a coin's news section: header with sentiment summary, then up to
-    `limit` headlines (date, sentiment tag, title, URL), or a no-news line."""
-    header = "%s - %s (%d up / %d down / %d neutral)" % (
-        coin, summary["overall"], summary["bullish"], summary["bearish"],
-        summary["neutral"])
-    lines = [header, "-" * len(header)]
-    if not items:
-        lines.append("  (no recent news)")
-        return "\n".join(lines)
-    for it in items[:limit]:
-        tag = news.classify_sentiment(it["title"])
-        date = it["published"] or "----------"
-        lines.append("  %s  [%-7s]  %s" % (date, tag, it["title"]))
-        lines.append("      %s" % it["link"])
-    return "\n".join(lines)
+def format_coin_news(coin: str, items: list) -> str:
+    """Format news items for a single coin using cryptolytics sentiment."""
+    sentiment = _cn.sentiment_summary(items)
+    lines = [
+        f"News: {coin}  [{len(items)} items]  "
+        f"sentiment: {sentiment.get('overall', 'neutral')} "
+        f"(bullish={sentiment.get('bullish', 0)} bearish={sentiment.get('bearish', 0)})"
+    ]
+    for item in items[:10]:
+        sent = _cn.classify_sentiment(item.get("title", ""))
+        marker = {"bullish": "+", "bearish": "-"}.get(sent, " ")
+        lines.append(f"  [{marker}] {item.get('published', '')} {item.get('title', '')[:80]}")
+    return "\n".join(lines) + "\n"

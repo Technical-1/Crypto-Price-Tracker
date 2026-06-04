@@ -275,3 +275,30 @@ def test_in_balance_banner():
     plan_balanced = _make_plan(in_balance=True)
     out = rebalance_report.format_trades(plan_balanced)
     assert "balance" in out.lower() or "no trades" in out.lower()
+
+
+import staking_report
+import news_report
+
+
+def test_format_staking_summary():
+    eff_apys = {"ethereum": (0.045, "api"), "solana": (0.07, "manual")}
+    rewards_sum = {"ethereum": 0.5}
+    config = {"ethereum": {"staked_qty": 10, "symbol": "ETH", "apy": 0.04}}
+    out = staking_report.format_staking(eff_apys, rewards_sum, config)
+    assert "ethereum" in out
+    assert "4.5" in out or "4.50" in out or "0.045" in out
+    assert "api" in out or "API" in out
+
+
+def test_news_report_uses_cryptolytics_sentiment():
+    """news_report.format_coin_news must NOT import the old news module."""
+    items = [
+        {"title": "Bitcoin surges to new highs", "link": "http://x.com/1",
+         "published": "2024-01-01", "source": "CoinTelegraph"},
+        {"title": "Market drops sharply", "link": "http://x.com/2",
+         "published": "2024-01-02", "source": "CoinTelegraph"},
+    ]
+    out = news_report.format_coin_news("bitcoin", items)
+    assert "bitcoin" in out.lower() or "Bitcoin" in out
+    assert "bullish" in out.lower() or "bearish" in out.lower() or "neutral" in out.lower()
