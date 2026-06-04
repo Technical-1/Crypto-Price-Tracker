@@ -55,7 +55,8 @@ def build_parser() -> argparse.ArgumentParser:
         description="Crypto portfolio tracker (coinbasis + coinlytics)",
     )
     main.add_argument("--data-dir", metavar="DIR", default=None,
-                      help="Data directory (default: CWD; env: CPT_DATA_DIR)")
+                      help="Data directory (default: ./ if it holds a ledger.json, "
+                           "else ~/.config/crypto-price-tracker; env: CPT_DATA_DIR)")
     main.add_argument("--quiet", action="store_true",
                       help="Suppress informational stderr notices")
 
@@ -231,6 +232,7 @@ def _build_ctx(args: argparse.Namespace) -> appconfig.AppContext:
         method=getattr(args, "method", "fifo"),
         select_file=getattr(args, "select", None),
         offline=getattr(args, "offline", False),
+        quiet=getattr(args, "quiet", False),
     )
 
 

@@ -41,7 +41,7 @@ flowchart TD
 ### Configuration (`appconfig.py`)
 - **Purpose**: Turn environment variables and CLI flags into a single immutable `AppContext`.
 - **Location**: `appconfig.py` (`build_context_from_env`, `AppContext`)
-- **Key responsibilities**: The only place env vars are read. Resolves the data directory (`--data-dir` > `CPT_DATA_DIR` > CWD) into concrete file paths; builds the `coinlytics.CoinGeckoConfig` (API key/plan from env, XDG cache dir, and a max-TTL cache when `--offline`); and resolves the cost-basis method string to a `coinbasis.CostBasisMethod`, loading a `LotSelection` JSON when `--method specific` is used.
+- **Key responsibilities**: The only place env vars are read. Resolves the data directory (`--data-dir` > `CPT_DATA_DIR` > the current directory when it holds a `ledger.json` > the global `~/.config/crypto-price-tracker/`, created on first use) into concrete file paths; builds the `coinlytics.CoinGeckoConfig` (API key/plan from env, XDG cache dir, and a max-TTL cache when `--offline`); and resolves the cost-basis method string to a `coinbasis.CostBasisMethod`, loading a `LotSelection` JSON when `--method specific` is used.
 
 ### I/O boundary (`appio.py`)
 - **Purpose**: The app's only file/config I/O, including all ledger-schema translation.

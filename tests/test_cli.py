@@ -19,13 +19,14 @@ import CryptoPriceTracker as cpt
 
 def test_appconfig_default_paths_are_cwd(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
+    (tmp_path / "ledger.json").write_text("[]")  # cwd holds a ledger → cwd is used
     monkeypatch.delenv("COINGECKO_API_KEY", raising=False)
     monkeypatch.delenv("COINGECKO_PLAN", raising=False)
     monkeypatch.delenv("CPT_DATA_DIR", raising=False)
 
     ctx = appconfig.build_context_from_env(data_dir=None, method="fifo",
                                            select_file=None, offline=False)
-    assert ctx.paths["ledger"].endswith("ledger.json")
+    assert ctx.paths["ledger"] == str(tmp_path / "ledger.json")
     assert ctx.cg_config.api_key is None
     assert ctx.cg_config.plan == "demo"
     assert ctx.method == coinbasis.CostBasisMethod.FIFO

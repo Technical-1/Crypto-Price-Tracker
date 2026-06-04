@@ -70,8 +70,12 @@ the box.
 
 ## Commands
 
-All twelve subcommands operate on the working-directory `ledger.json` (override with
-`--data-dir`):
+All twelve subcommands read their `ledger.json` from a single data directory, resolved
+in this order: `--data-dir DIR` if given, then `CPT_DATA_DIR`, then the current
+directory when it already holds a `ledger.json`, then the global
+`~/.config/crypto-price-tracker/` (respecting `$XDG_CONFIG_HOME`, created on first use).
+This means the installed command works from any directory without configuration, while a
+project-local `ledger.json` still takes precedence when you're working inside its folder.
 
 | Command | Description |
 |---|---|
@@ -99,7 +103,7 @@ These flags are accepted by every data command:
 | `--wallet NAME` | Filter output to a single wallet |
 | `--year YYYY` | Calendar-year filter (e.g. `--year 2024`) |
 | `--offline` | Never fetch; use cached prices only |
-| `--data-dir DIR` | Data directory (default: CWD; env: `CPT_DATA_DIR`) |
+| `--data-dir DIR` | Data directory (default: `./` when it holds a ledger, else `~/.config/crypto-price-tracker/`; env: `CPT_DATA_DIR`) |
 
 ## CoinGecko API Key
 

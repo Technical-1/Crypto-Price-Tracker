@@ -15,6 +15,15 @@ def _utc(y, m, d):
     return datetime(y, m, d, tzinfo=timezone.utc)
 
 
+# ── Isolation ───────────────────────────────────────────────────────────────────
+
+@pytest.fixture(autouse=True)
+def _isolate_global_config(tmp_path_factory, monkeypatch):
+    """Point XDG_CONFIG_HOME at a throwaway dir so the global data-dir fallback
+    in appconfig never reads or writes the real ~/.config during tests."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path_factory.mktemp("xdg-config")))
+
+
 # ── Ledger fixtures ────────────────────────────────────────────────────────────
 
 @pytest.fixture
