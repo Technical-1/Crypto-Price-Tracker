@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "crypto-price-tracker"
+version = "2.0.0"
+description = "A thin CLI front-end over the coinbasis and cryptolytics packages."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "coinbasis>=0.1,<0.2",
+    "cryptolytics>=0.1,<0.2",
+]
+
+[project.scripts]
+crypto-price-tracker = "CryptoPriceTracker:cli"
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]
+
+[tool.setuptools]
+py-modules = [
+    "CryptoPriceTracker",
+    "appio",
+    "appconfig",
+    "report",
+    "rebalance_report",
+    "staking_report",
+    "news_report",
+    "history_report",
+    "perf_report",
+    "chart",
+]
