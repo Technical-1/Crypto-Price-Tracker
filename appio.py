@@ -189,6 +189,49 @@ def _auto_migrate(path: str, v1_rows: list[dict]) -> list[coinbasis.Transaction]
     return txs
 
 
+def migrate_command(ledger_path: str, *, dry_run: bool = False) -> None:
+    """Explicit migrate subcommand.
+
+    dry_run=True: describe what would happen without writing anything.
+    dry_run=False: upgrade in-place (same as auto-migration on load).
+    """
+    if not os.path.exists(ledger_path):
+        print(f"No ledger found at {ledger_path}.", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        with open(ledger_path) as f:
+            rows = json.load(f)
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"Cannot read ledger: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    if _is_coinbasis_schema(rows):
+        print("Ledger is already in the coinbasis multi-wallet schema. No migration needed.")
+        return
+
+    if not _is_v1_schema(rows):
+        print("Ledger has an unrecognised format; cannot migrate.", file=sys.stderr)
+        sys.exit(1)
+
+    txs = migrate_v1_ledger(rows)
+    n = len(txs)
+
+    if dry_run:
+        print(
+            f"[dry-run] Would migrate {n} transaction(s) from V1 format to "
+            f"the coinbasis multi-wallet schema.\n"
+            f"  backup  → {os.path.basename(ledger_path)}.v1.bak (if not already present)\n"
+            f"  rewrite → {os.path.basename(ledger_path)} (coinbasis externally-tagged JSON)"
+        )
+    else:
+        _auto_migrate(ledger_path, rows)
+        print(
+            f"Migrated {n} transaction(s). Backup at "
+            f"{os.path.basename(ledger_path)}.v1.bak"
+        )
+
+
 def save_ledger(path: str, txs: list[coinbasis.Transaction]) -> None:
     """Atomically overwrite ledger.json with the coinbasis schema."""
     tmp = path + ".tmp"

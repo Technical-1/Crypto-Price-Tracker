@@ -187,3 +187,45 @@ def test_load_ledger_idempotent_after_migration(tmp_path, capsys):
     err2 = capsys.readouterr().err
     assert "migrated" not in err2
     assert len(txs2) == 1
+
+
+def test_migrate_dry_run_no_file_changes(tmp_path, capsys):
+    """--dry-run prints a description and does NOT write .v1.bak or rewrite ledger."""
+    ledger_path = tmp_path / "ledger.json"
+    v1_data = [{"date": "2024-01-01", "coin": "bitcoin", "action": "buy",
+                "quantity": 1.0, "price_usd": 50000.0, "fee_usd": 0.0}]
+    _write_json(ledger_path, v1_data)
+
+    appio.migrate_command(str(ledger_path), dry_run=True)
+    out = capsys.readouterr().out
+
+    assert "would" in out.lower() or "dry" in out.lower() or "1 transaction" in out.lower()
+    # Backup not created
+    assert not os.path.exists(str(ledger_path) + ".v1.bak")
+    # Ledger not rewritten (still V1)
+    with open(ledger_path) as f:
+        still_v1 = json.load(f)
+    assert still_v1 == v1_data
+
+
+def test_migrate_command_performs_upgrade(tmp_path, capsys):
+    ledger_path = tmp_path / "ledger.json"
+    v1_data = [{"date": "2024-01-01", "coin": "bitcoin", "action": "buy",
+                "quantity": 1.0, "price_usd": 50000.0, "fee_usd": 0.0}]
+    _write_json(ledger_path, v1_data)
+
+    appio.migrate_command(str(ledger_path), dry_run=False)
+
+    assert os.path.exists(str(ledger_path) + ".v1.bak")
+    with open(ledger_path) as f:
+        rewritten = json.load(f)
+    assert "Buy" in rewritten[0]
+
+
+def test_migrate_command_already_migrated(tmp_path, capsys):
+    """If ledger is already in coinbasis schema, migrate prints a no-op message."""
+    ledger_path = tmp_path / "ledger.json"
+    _write_json(ledger_path, [])  # empty = coinbasis schema
+    appio.migrate_command(str(ledger_path), dry_run=False)
+    out = capsys.readouterr().out
+    assert "already" in out.lower() or "no migration" in out.lower()
