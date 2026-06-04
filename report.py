@@ -219,3 +219,18 @@ def format_valuation(portfolio_report: coinbasis.PortfolioReport) -> str:
         lines.append(f"\n  (no price for: {', '.join(portfolio_report.missing_prices)})")
 
     return "\n".join(lines) + "\n"
+
+
+def format_tax(estimate: coinbasis.TaxEstimate, config: coinbasis.TaxConfig) -> str:
+    """Render a TaxEstimate + TaxConfig into a tax summary string."""
+    lines = [
+        f"Estimated Tax ({config.jurisdiction})",
+        f"  Short-term gain:  ${float(estimate.short_term_gain):>12,.2f}  "
+        f"@ {float(config.short_term_rate)*100:.0f}%  "
+        f"→ ${float(estimate.short_term_tax):>10,.2f}",
+        f"  Long-term gain:   ${float(estimate.long_term_gain):>12,.2f}  "
+        f"(brackets)         → ${float(estimate.long_term_tax):>10,.2f}",
+        f"  {'─'*60}",
+        f"  Total estimated tax:            ${float(estimate.total_tax):>10,.2f}",
+    ]
+    return "\n".join(lines) + "\n"

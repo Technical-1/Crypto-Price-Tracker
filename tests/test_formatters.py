@@ -199,3 +199,19 @@ def test_format_valuation_shows_alloc_bars():
     assert "bitcoin" in out
     assert "ethereum" in out
     assert any(c in out for c in ["█", "▓", "|", "#"])
+
+
+def test_format_tax_shows_estimate():
+    estimate = coinbasis.TaxEstimate(
+        short_term_gain=Decimal("2000"),
+        long_term_gain=Decimal("10000"),
+        short_term_tax=Decimal("700"),
+        long_term_tax=Decimal("0"),
+        total_tax=Decimal("700"),
+    )
+    config = coinbasis.TaxConfig.default()
+    out = report.format_tax(estimate, config)
+    assert "700" in out
+    assert "Short" in out or "short" in out
+    assert "Long" in out or "long" in out
+    assert "US" in out or config.jurisdiction in out
