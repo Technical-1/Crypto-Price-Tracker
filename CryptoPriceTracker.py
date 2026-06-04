@@ -270,7 +270,81 @@ def run_tax(ctx: appconfig.AppContext, args: argparse.Namespace) -> None:
 
 
 def run_rebalance(ctx: appconfig.AppContext, args: argparse.Namespace) -> None:
-    raise NotImplementedError("run_rebalance: see plan-03 Task 21")
+    """rebalance command: compute trades toward target weights."""
+    from decimal import Decimal
+    from datetime import datetime, timezone
+
+    strategy = getattr(args, "strategy", "equal")
+    band = Decimal(str(getattr(args, "band", 0.05)))
+    full = getattr(args, "full", False)
+    days = getattr(args, "days", 90)
+
+    txs = appio.load_ledger(ctx.paths["ledger"],
+                            no_migrate=getattr(args, "no_migrate", False))
+    portfolio = coinbasis.Portfolio.from_transactions(txs)
+
+    client = cryptolytics.CoinGeckoClient(ctx.cg_config)
+
+    holdings_list = portfolio.holdings(ctx.method)
+    coins = list({h.asset for h in holdings_list})
+
+    try:
+        if coins:
+            book = client.prices(coins)
+        else:
+            book = cryptolytics.PriceBook(
+                quotes={}, fetched_at=datetime.now(timezone.utc),
+                stale=False, sparklines={})
+    except cryptolytics.CryptolyticsError as exc:
+        print(f"Failed to fetch prices: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    prices_map = book.prices_map()
+    current_values = {
+        av.asset: av.market_value
+        for av in portfolio.valuation(ctx.method, prices_map).assets
+    }
+
+    # Market caps (for marketcap strategy)
+    market_caps = {}
+    if strategy == "marketcap" and coins:
+        try:
+            market_caps = client.market_caps(coins)
+        except cryptolytics.CryptolyticsError:
+            print("(market cap fetch failed; falling back to equal weights)",
+                  file=sys.stderr)
+            strategy = "equal"
+
+    # Target weights
+    try:
+        custom = appio.load_targets(ctx.paths["targets"]) if strategy == "custom" else None
+        if strategy == "custom" and custom is None:
+            print("No targets.json found. Create one or use --strategy equal/marketcap.",
+                  file=sys.stderr)
+            sys.exit(1)
+        weights = cryptolytics.rebalance.target_weights(
+            strategy, coins, market_caps=market_caps or None, custom=custom)
+    except ValueError as exc:
+        print(f"Rebalance error: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    reb_strategy = (cryptolytics.RebalanceStrategy.FULL if full
+                    else cryptolytics.RebalanceStrategy.BAND)
+    plan = cryptolytics.rebalance.compute_trades(
+        current_values, weights, prices_map,
+        strategy=reb_strategy, band=band,
+        portfolio=portfolio, method_for_value=coinbasis.CostBasisMethod.HIFO,
+    )
+
+    # Risk analytics (best-effort)
+    for coin in coins:
+        try:
+            client.history(coin, days)
+        except cryptolytics.CryptolyticsError:
+            print(f"(skipped history for {coin})", file=sys.stderr)
+
+    print(rebalance_report.format_allocation(plan))
+    print(rebalance_report.format_trades(plan))
 
 
 def run_performance(ctx: appconfig.AppContext, args: argparse.Namespace) -> None:

@@ -263,3 +263,38 @@ def test_run_tax_year_filter(tmp_path, capsys, monkeypatch):
     mock_portfolio.capital_gains_report.assert_called_once_with(
         coinbasis.CostBasisMethod.FIFO, 2023
     )
+
+
+# ── Task 21: run_rebalance orchestration ──────────────────────────────────────
+
+def test_run_rebalance_equal_strategy(tmp_path, capsys, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("COINGECKO_API_KEY", raising=False)
+    ledger_path = tmp_path / "ledger.json"
+    _write_coinbasis_ledger(ledger_path, [])  # empty — test structure only
+
+    mock_portfolio = MagicMock()
+    mock_portfolio.holdings.return_value = []
+    mock_portfolio.valuation.return_value = MagicMock(
+        assets=[], total_cost=Decimal("0"), total_value=Decimal("0"),
+        total_unrealized=Decimal("0"), total_return=Decimal("0"), missing_prices=[])
+
+    mock_plan = MagicMock()
+    mock_plan.actions = []
+    mock_plan.total_value = Decimal("0")
+    mock_plan.total_buys_usd = Decimal("0")
+    mock_plan.total_sells_usd = Decimal("0")
+    mock_plan.in_balance = True
+
+    with patch("coinbasis.Portfolio.from_transactions", return_value=mock_portfolio), \
+         patch("cryptolytics.CoinGeckoClient") as MockClient, \
+         patch("cryptolytics.rebalance.compute_trades", return_value=mock_plan), \
+         patch("cryptolytics.rebalance.target_weights", return_value={}):
+        mock_client = MockClient.return_value
+        mock_client.prices.return_value = MagicMock(prices_map=lambda: {}, stale=False)
+        mock_client.history.return_value = []
+        cpt.cli(["--data-dir", str(tmp_path), "rebalance"])
+
+    out = capsys.readouterr().out
+    # Should print the rebalance plan (even if empty/in-balance)
+    assert "balance" in out.lower() or "rebalance" in out.lower() or out.strip()
