@@ -100,3 +100,102 @@ def test_format_unrealized_missing_prices_notice():
     )
     out = report.format_unrealized(report_obj)
     assert "solana" in out or "missing" in out.lower()
+
+
+import chart
+
+
+def _make_book(coins: dict) -> cryptolytics.PriceBook:
+    """Build a minimal PriceBook for testing."""
+    from datetime import datetime, timezone
+    quotes = {
+        cid: cryptolytics.Quote(
+            price=Decimal(str(data["price"])),
+            change_24h=Decimal(str(data.get("change_24h", "0"))),
+            change_7d=None,
+            market_cap=None,
+            volume_24h=None,
+        )
+        for cid, data in coins.items()
+    }
+    return cryptolytics.PriceBook(
+        quotes=quotes,
+        fetched_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
+        stale=False,
+        sparklines={},
+    )
+
+
+def test_format_prices_headers_and_data():
+    pr = coinbasis.PortfolioReport(
+        assets=[
+            coinbasis.AssetValuation(
+                asset="bitcoin",
+                quantity=Decimal("1"),
+                cost_basis=Decimal("50000"),
+                price=Decimal("60000"),
+                market_value=Decimal("60000"),
+                unrealized=Decimal("10000"),
+                allocation=Decimal("1"),
+            )
+        ],
+        total_cost=Decimal("50000"),
+        total_value=Decimal("60000"),
+        total_unrealized=Decimal("10000"),
+        total_return=Decimal("0.2"),
+        missing_prices=[],
+    )
+    book = _make_book({"bitcoin": {"price": 60000, "change_24h": 2.5}})
+    out = report.format_prices(pr, book)
+    assert "bitcoin" in out
+    assert "60000" in out
+    assert "2.5" in out or "+2.50" in out or "2.50" in out
+
+
+def test_format_holdings_all_columns():
+    holdings = [
+        coinbasis.Holding(
+            asset="bitcoin", wallet="default",
+            quantity=Decimal("2"),
+            cost_basis=Decimal("100000"),
+            average_cost=Decimal("50000"),
+        )
+    ]
+    out = report.format_holdings(holdings, prices_map={}, group="asset")
+    assert "bitcoin" in out
+    assert "default" in out
+    assert "50000" in out
+
+
+def test_format_valuation_shows_alloc_bars():
+    pr = coinbasis.PortfolioReport(
+        assets=[
+            coinbasis.AssetValuation(
+                asset="bitcoin",
+                quantity=Decimal("1"),
+                cost_basis=Decimal("50000"),
+                price=Decimal("60000"),
+                market_value=Decimal("60000"),
+                unrealized=Decimal("10000"),
+                allocation=Decimal("0.6"),
+            ),
+            coinbasis.AssetValuation(
+                asset="ethereum",
+                quantity=Decimal("10"),
+                cost_basis=Decimal("20000"),
+                price=Decimal("4000"),
+                market_value=Decimal("40000"),
+                unrealized=Decimal("20000"),
+                allocation=Decimal("0.4"),
+            ),
+        ],
+        total_cost=Decimal("70000"),
+        total_value=Decimal("100000"),
+        total_unrealized=Decimal("30000"),
+        total_return=Decimal("0.428"),
+        missing_prices=[],
+    )
+    out = report.format_valuation(pr)
+    assert "bitcoin" in out
+    assert "ethereum" in out
+    assert any(c in out for c in ["█", "▓", "|", "#"])
