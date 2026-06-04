@@ -166,3 +166,122 @@ def test_snapshot_append_dedup_round_trip(tmp_path):
     # 2024-01-01 was replaced with the updated value
     jan1 = next(s for s in final if s.date == "2024-01-01")
     assert jan1.total_value == 1050.0
+
+
+# ── MockClient-driven command integration ──────────────────────────────────────
+
+def test_prices_command_full_pipeline(tmp_path, capsys, monkeypatch,
+                                       tmp_ledger, mock_client):
+    """prices command: ledger → Portfolio.valuation → format_prices (MockClient)."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("COINGECKO_API_KEY", raising=False)
+
+    mock_portfolio = MagicMock()
+    mock_portfolio.holdings.return_value = [
+        coinbasis.Holding(asset="bitcoin", wallet="default",
+                          quantity=Decimal("1"), cost_basis=Decimal("20000"),
+                          average_cost=Decimal("20000")),
+    ]
+    mock_valuation = MagicMock()
+    mock_valuation.assets = [
+        coinbasis.AssetValuation(
+            asset="bitcoin", quantity=Decimal("1"),
+            cost_basis=Decimal("20000"), price=Decimal("50000"),
+            market_value=Decimal("50000"), unrealized=Decimal("30000"),
+            allocation=Decimal("1"),
+        )
+    ]
+    mock_valuation.total_cost = Decimal("20000")
+    mock_valuation.total_value = Decimal("50000")
+    mock_valuation.total_unrealized = Decimal("30000")
+    mock_valuation.total_return = Decimal("1.5")
+    mock_valuation.missing_prices = []
+    mock_portfolio.valuation.return_value = mock_valuation
+
+    with patch("coinbasis.Portfolio.from_transactions", return_value=mock_portfolio), \
+         patch("cryptolytics.CoinGeckoClient", return_value=mock_client):
+        cpt.cli(["--data-dir", str(tmp_path), "prices"])
+
+    out = capsys.readouterr().out
+    assert "bitcoin" in out
+    assert "50000" in out
+    assert "30000" in out
+
+
+def test_holdings_command_full_pipeline(tmp_path, capsys, monkeypatch,
+                                         tmp_ledger, mock_client):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("COINGECKO_API_KEY", raising=False)
+
+    mock_portfolio = MagicMock()
+    mock_portfolio.holdings.return_value = [
+        coinbasis.Holding(asset="bitcoin", wallet="cold",
+                          quantity=Decimal("1"), cost_basis=Decimal("20000"),
+                          average_cost=Decimal("20000")),
+        coinbasis.Holding(asset="ethereum", wallet="default",
+                          quantity=Decimal("2"), cost_basis=Decimal("4000"),
+                          average_cost=Decimal("2000")),
+    ]
+
+    with patch("coinbasis.Portfolio.from_transactions", return_value=mock_portfolio), \
+         patch("cryptolytics.CoinGeckoClient", return_value=mock_client):
+        cpt.cli(["--data-dir", str(tmp_path), "holdings"])
+
+    out = capsys.readouterr().out
+    assert "bitcoin" in out
+    assert "ethereum" in out
+
+
+def test_valuation_command_full_pipeline(tmp_path, capsys, monkeypatch,
+                                          tmp_ledger, mock_client):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("COINGECKO_API_KEY", raising=False)
+
+    mock_portfolio = MagicMock()
+    mock_portfolio.holdings.return_value = [
+        coinbasis.Holding(asset="bitcoin", wallet="default",
+                          quantity=Decimal("1"), cost_basis=Decimal("20000"),
+                          average_cost=Decimal("20000")),
+    ]
+    mock_valuation = MagicMock()
+    mock_valuation.assets = [
+        coinbasis.AssetValuation(
+            asset="bitcoin", quantity=Decimal("1"),
+            cost_basis=Decimal("20000"), price=Decimal("50000"),
+            market_value=Decimal("50000"), unrealized=Decimal("30000"),
+            allocation=Decimal("1"),
+        )
+    ]
+    mock_valuation.total_cost = Decimal("20000")
+    mock_valuation.total_value = Decimal("50000")
+    mock_valuation.total_unrealized = Decimal("30000")
+    mock_valuation.total_return = Decimal("1.5")
+    mock_valuation.missing_prices = []
+    mock_portfolio.valuation.return_value = mock_valuation
+
+    with patch("coinbasis.Portfolio.from_transactions", return_value=mock_portfolio), \
+         patch("cryptolytics.CoinGeckoClient", return_value=mock_client):
+        cpt.cli(["--data-dir", str(tmp_path), "valuation"])
+
+    out = capsys.readouterr().out
+    assert "bitcoin" in out
+    assert "Allocation" in out or "allocation" in out.lower()
+
+
+def test_performance_command_full_pipeline(tmp_path, capsys, monkeypatch,
+                                            tmp_ledger, mock_client):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("COINGECKO_API_KEY", raising=False)
+
+    mock_portfolio = MagicMock()
+    mock_portfolio.holdings.return_value = []
+    mock_portfolio.valuation.return_value = MagicMock(
+        assets=[], total_cost=Decimal("0"), total_value=Decimal("1000"),
+        total_unrealized=Decimal("0"), total_return=Decimal("0"), missing_prices=[])
+
+    with patch("coinbasis.Portfolio.from_transactions", return_value=mock_portfolio), \
+         patch("cryptolytics.CoinGeckoClient", return_value=mock_client):
+        cpt.cli(["--data-dir", str(tmp_path), "performance"])
+
+    out = capsys.readouterr().out
+    assert "Performance" in out or "performance" in out.lower()
