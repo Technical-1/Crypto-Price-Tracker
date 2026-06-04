@@ -1,23 +1,24 @@
 # Crypto-Price-Tracker
 
-A small command-line tool that shows the live profit/loss on a cryptocurrency portfolio, coin by coin.
+A command-line crypto portfolio tracker: cost-basis tax accounting, live market data, rebalancing, performance, staking, news, and historical playback — all from a transaction ledger.
 
-Coinbase didn't give me a clear overall profit figure for the coins I held, so I built a script that pulls current prices from the CoinGecko API and prints a per-coin table of profit, cost basis, and 24-hour change. It's deliberately a single, dependency-light Python file you can drop your own holdings into.
+I keep my crypto activity in a single transaction ledger and let the tool answer the questions an exchange dashboard doesn't: what are my realized and unrealized gains, what tax do I owe under FIFO/LIFO/HIFO/average/specific-ID, how far is my allocation from target, and how has the portfolio moved over time. The app itself is a thin CLI; all the accounting and analytics live in two published PyPI packages — [`coinbasis`](https://pypi.org/project/coinbasis/) (the cost-basis/tax engine) and [`coinlytics`](https://pypi.org/project/coinlytics/) (portfolio analytics + market data).
 
 ## Features
 
-- **Per-coin profit table** — for each holding it prints profit, cost basis, and 24-hour price change in an aligned terminal table.
-- **Live pricing via CoinGecko** — one batched request fetches USD prices and 24h change for every tracked coin at once.
-- **Resilient to bad data** — coins that CoinGecko has delisted or returns without a price are skipped with a notice on stderr instead of crashing the run.
-- **Clear network failures** — rate limits, timeouts, and HTTP errors produce a readable message and a non-zero exit code, never a raw traceback.
-- **Bring your own holdings** — edit one dictionary to set your totals and cost basis; add coins by extending the dictionary and the request.
-- **Tax & cost-basis analysis** — import transactions from CSV, or enter them interactively, then run a full tax report with FIFO, LIFO, or average-cost lot matching.
+- **Ledger-driven** — record buys, sells, income, and more in `ledger.json`; every report is derived from that single source of truth. Import from CSV or add transactions interactively.
+- **Cost-basis & tax** — realized gains, unrealized P/L, and an estimated-tax report with FIFO, LIFO, HIFO, average-cost, or specific-ID lot matching and short/long-term classification.
+- **Live market data via CoinGecko** — batched price fetches through `coinlytics`, with last-good caching and a fully offline mode.
+- **Rebalancing** — equal-weight, market-cap, or custom target allocations with drift bands, plus volatility/correlation risk analytics.
+- **Performance, staking, news, history** — Sharpe/drawdown metrics, staking-yield projections, sentiment-tagged headlines, and Unicode-sparkline historical playback.
+- **Resilient by design** — rate limits, missing prices, unreadable feeds, and bad ledger rows degrade gracefully with stderr notices instead of crashing the run.
+- **Automatic V1 migration** — an old single-wallet flat ledger is upgraded to the multi-wallet schema on first use, with a `.v1.bak` backup.
 
 ## Tech Stack
 
-- **Language**: Python 3
-- **Cost-basis engine**: [`coinbasis`](https://pypi.org/project/coinbasis/) — multi-wallet ledger, lot matching, tax estimation
-- **Market data & analytics**: [`coinlytics`](https://pypi.org/project/coinlytics/) — CoinGecko/DefiLlama/RSS access, rebalancing, performance, news
+- **Language**: Python 3.10+
+- **Cost-basis engine**: [`coinbasis`](https://pypi.org/project/coinbasis/) (>=0.1,<0.2) — multi-wallet ledger, lot matching, tax estimation
+- **Market data & analytics**: [`coinlytics`](https://pypi.org/project/coinlytics/) (>=0.1,<0.2) — CoinGecko/DefiLlama/RSS access, rebalancing, performance, news
 - **Data source**: CoinGecko public REST API (via `coinlytics`)
 - **Testing**: `pytest`
 - **Linting**: `ruff`
@@ -30,42 +31,62 @@ packages. The app only handles argument parsing, file/config I/O (`appio.py`,
 
 ### Prerequisites
 
-- Python 3.8+
+- Python 3.10+
 - An internet connection (CoinGecko's public API needs no key)
 
 ### Installation
 
+Install from source — this pulls in the `coinbasis` and `coinlytics` packages and
+exposes a `crypto-price-tracker` console command:
+
 ```bash
-python3 -m pip install coinbasis coinlytics
+python3 -m pip install .
+crypto-price-tracker prices
 ```
 
-The two packages are the only runtime dependencies (declared in `pyproject.toml`).
-For local development with editable installs, see the **Development** section below.
+Or run the script directly without installing (you still need the two packages on the
+import path — `python3 -m pip install coinbasis coinlytics`):
+
+```bash
+python3 CryptoPriceTracker.py prices
+```
+
+Both invocations are equivalent; the rest of this README uses
+`python3 CryptoPriceTracker.py`, but you can substitute `crypto-price-tracker` after a
+`pip install .`.
 
 ### Usage
 
 ```bash
-python3 CryptoPriceTracker.py
+crypto-price-tracker prices            # installed console command
+python3 CryptoPriceTracker.py prices   # or run the script directly
 ```
 
-With no arguments the tool prints the live per-coin profit table. When a `ledger.json`
-file is present in the working directory (created by the `import` or `add` subcommands),
-holdings are derived from it automatically. Otherwise the built-in `originalHoldings`
-dictionary is used — edit the `total` and `cost` values there to match your own holdings.
-Add more coins by extending the dictionary and the request URL.
+The typical workflow is: seed a ledger with `import FILE.csv` (or `add`), then run any
+report command against it. When a `ledger.json` is present in the working directory,
+holdings are derived from it automatically. With no ledger and no arguments the tool
+falls back to a small built-in demo portfolio so the live-price view still works out of
+the box.
 
 ## Commands
+
+All twelve subcommands operate on the working-directory `ledger.json` (override with
+`--data-dir`):
 
 | Command | Description |
 |---|---|
 | `prices [--sparkline]` | Current prices + unrealized P/L (default view) |
-| `holdings [--group {asset,wallet}] [--wallet NAME]` | Open lots per wallet |
+| `holdings [--group {asset,wallet}] [--wallet NAME]` | Open lots per wallet/asset |
 | `valuation` | Portfolio value + allocation bar chart |
-| `performance [--risk-free R]` | Sharpe, drawdown, cumulative return, sparkline |
-| `migrate [--dry-run]` | Explicitly upgrade a V1 ledger to the coinbasis schema |
-
-The existing `tax`, `rebalance`, `staking`, `news`, `history`, `import`, and `add`
-commands remain available.
+| `tax [--year YYYY]` | Realized gains, unrealized P/L, estimated tax |
+| `rebalance [--strategy ...] [--band B] [--full] [--days N]` | Trades toward a target allocation + risk analytics |
+| `performance [--days N] [--risk-free R]` | Sharpe, drawdown, cumulative return, sparkline |
+| `staking [--days N]` | Staking APY and projected yield |
+| `news [--coin ID] [--limit N]` | Crypto headlines with sentiment |
+| `history [--days N] [--date YYYY-MM-DD] [--play]` | Historical portfolio value chart/playback |
+| `import FILE.csv` | Import transactions from CSV into the ledger |
+| `add` | Interactively add one transaction |
+| `migrate [--dry-run]` | Upgrade a legacy V1 ledger to the coinbasis schema |
 
 ## Global Flags
 
@@ -380,7 +401,7 @@ Pass `--days N` to control how many days of price history are fetched from CoinG
 ```bash
 # Install the app plus the two packages in editable mode for local development
 python3 -m pip install -e .
-python3 -m pip install -e ../coinbasis -e ../coinlytics   # if developing the packages too
+python3 -m pip install -e ../coinbasis-py -e ../coinlytics-py   # only if developing the packages too
 
 # Run the test suite
 python3 -m pytest

@@ -2,81 +2,92 @@
 
 ## Overview
 
-Crypto-Price-Tracker is a small Python command-line tool that prints the live profit/loss on a cryptocurrency portfolio, one coin at a time. It pulls current USD prices and 24-hour change from the CoinGecko API and renders an aligned terminal table of profit, cost basis, and daily movement. The interesting part is how much robustness lives in such a small file: it stays useful even when an exchange API rate-limits it or quietly drops a coin.
+Crypto-Price-Tracker is a command-line crypto portfolio tracker. From a single
+transaction ledger it produces cost-basis tax reports, live valuations, rebalancing
+plans, performance metrics, staking-yield projections, news with sentiment, and
+historical playback. The app itself is a thin CLI: all accounting and analytics live in
+two published PyPI packages — `coinbasis` (the cost-basis/tax engine) and `coinlytics`
+(portfolio analytics + market data) — so the repository is just argument parsing,
+file/config I/O, and output formatting.
 
 ## Problem Solved
 
-Exchange apps like Coinbase historically didn't show a clear overall profit/loss across everything you hold. This tool answers a single question directly: for each coin I own, given what I paid, am I up or down right now — and by how much?
+Exchange dashboards rarely answer the questions that matter at tax time or when
+rebalancing: what are my realized and unrealized gains, what tax do I owe under a given
+lot-matching method, how far has my allocation drifted from target, and how has the
+portfolio moved over time. This tool answers all of them from one ledger you control,
+with FIFO/LIFO/HIFO/average/specific-ID cost basis and short/long-term classification.
 
 ## Target Users
 
-- **Individual crypto holders** — anyone who wants a quick, at-a-glance profit number per coin without logging into an exchange dashboard.
-- **Tinkerers** — people comfortable editing a Python dictionary to track their own coins and cost basis, and extending the list over time.
+- **Crypto holders preparing taxes** — anyone who needs realized-gain and estimated-tax reports across multiple wallets and lot-matching methods.
+- **Active portfolio managers** — people who want rebalancing trades, risk analytics, and performance metrics without a paid dashboard.
+- **Command-line users** — those who prefer a scriptable, pipeable tool that keeps its data in plain local files.
 
 ## Key Features
 
-### Per-coin profit table
-For every holding, the tool prints profit, cost basis, and 24-hour percentage change in a fixed-width table, computed from current CoinGecko prices.
+### Ledger-driven reporting
+Every report derives from `ledger.json`. Seed it with `import FILE.csv` or `add`, then run any of the twelve subcommands (`prices`, `holdings`, `valuation`, `tax`, `rebalance`, `performance`, `staking`, `news`, `history`, `import`, `add`, `migrate`).
 
-### Resilient pricing
-Missing, delisted, or price-less coins are skipped with a notice on stderr; network failures and rate limits end with a clear message and a non-zero exit code instead of a stack trace.
+### Cost-basis & tax
+The `tax` command prints realized gains (with short/long-term subtotals), unrealized P/L at live prices, and an estimated-tax section using the rates in `taxconfig.json`.
 
-### Editable holdings
-A single dictionary defines the tracked coins and their cost basis. Adding a coin means adding its CoinGecko ID to the request and the dictionary.
+### Rebalancing & analytics
+`rebalance` computes trades toward equal-weight, market-cap, or custom target allocations with a drift band, alongside volatility and correlation risk analytics. `performance` reports Sharpe, drawdown, and cumulative return with a sparkline.
+
+### Resilient market data
+Live prices come from CoinGecko through `coinlytics`, with last-good caching, a fully offline mode (`--offline`), and graceful handling of rate limits and missing prices.
 
 ## Technical Highlights
 
-### Turning a rate-limit into a clear error, not a mystery crash
-CoinGecko returns valid JSON even for a 429 rate-limit response, so naively parsing it would let the program run on and fail later with a confusing `KeyError` deep in the print loop. `fetch_prices` calls `raise_for_status()` (and sets a request timeout); `main` catches `requests.RequestException`, prints a readable message, and exits 1. The failure is reported at its true cause — the request — rather than as unrelated downstream noise.
+### Package decomposition keeps the app thin
+The cost-basis/tax engine (`coinbasis`) and the analytics/market-data layer (`coinlytics`) are separate, versioned PyPI packages. `CryptoPriceTracker.py` only orchestrates: each `run_*` function loads data, calls the packages, and hands typed dataclasses to a formatter. There is no accounting or analytics math in this repository.
 
-### Graceful degradation when a coin disappears
-Coin IDs get renamed or delisted, so a healthy response can simply omit a coin you track. The print loop looks coins up with `.get` and treats both a missing entry and a null/absent `usd` value as "skip this row, note it on stderr, keep going" (`CryptoPriceTracker.py:62`). One bad coin never blanks out the rest of the report.
+### Automatic V1 ledger migration with a backup
+`appio.load_ledger` detects the legacy single-wallet flat schema and upgrades it in place to the `coinbasis` externally-tagged multi-wallet schema, writing a `ledger.json.v1.bak` backup first (`_auto_migrate`). `--no-migrate` opts out and `migrate --dry-run` previews the conversion, so existing ledgers keep working without manual steps and are always recoverable.
 
-### Pure, testable profit math with a divide-by-zero guard
-`compute_profit` (`CryptoPriceTracker.py:38`) is a pure function: it computes `(price - cost/total) * total` and returns `None` when `total <= 0`, which is the realistic failure mode for a hand-edited holdings dictionary. Keeping it free of I/O means the arithmetic — including the multi-coin average-cost case — is verified directly in the test suite.
+### One cost-basis method switcher for every command
+`appconfig.build_context_from_env` resolves `--method` (and `--select` for specific-ID) a single time into the `AppContext`, mapping the string to a `coinbasis.CostBasisMethod` and loading a `LotSelection` when needed. Downstream orchestrators just use the resolved method, so FIFO/LIFO/HIFO/average/specific behave identically across `tax`, `holdings`, `valuation`, and the rest.
 
-### Output you can pipe
-Skip notices and errors are written to stderr while only data rows go to stdout, so `python CryptoPriceTracker.py > table.txt` produces a clean data file with diagnostics still visible on the terminal.
+### Resilient, offline-capable market data
+Prices flow through a `coinlytics.CoinGeckoClient` configured in `appconfig.py`. `--offline` sets a max cache TTL so the client never hits the network and returns a stale `PriceBook` instead; live runs note staleness on stderr, and typed errors (`RateLimitedError`, `PriceSourceError`, `FeedError`, `StakingError`) are mapped in one `_dispatch` site to clear messages and exit codes rather than tracebacks.
 
 ## Engineering Decisions
 
-### Single file with functions vs. a flat script vs. a package
-- **Constraint**: The tool needed to become testable, but it's fundamentally a one-file utility.
-- **Options**: Leave it as a flat top-level script (untestable, runs HTTP on import); restructure into a multi-module package (heavy for the scope); or split into functions behind a `__main__` guard.
-- **Choice**: Functions (`fetch_prices`, `compute_profit`, `main`) in one importable module.
-- **Why**: It unlocks unit testing of both network and arithmetic paths without the ceremony of packaging something this small.
+### Reusable packages vs. a single script
+- **Constraint**: The accounting and analytics logic is reusable and was outgrowing a one-file utility.
+- **Options**: Keep everything in one script; split into local modules; or extract into independently published packages.
+- **Choice**: Extract `coinbasis` and `coinlytics` as PyPI packages the app depends on.
+- **Why**: The engine and analytics can be tested and versioned on their own while the app stays a thin, focused CLI.
 
-### Skip-and-continue vs. fail-fast on per-coin data
-- **Constraint**: External coin IDs change without warning.
-- **Options**: Abort the whole run on the first missing coin, or skip just the affected coins.
-- **Choice**: Skip the affected coin with an stderr notice and continue.
-- **Why**: A portfolio report is most useful when one delisted coin doesn't hide every other coin's profit.
+### Single I/O boundary
+- **Constraint**: File formats, env wiring, and schema translation are app concerns, not library concerns.
+- **Options**: Read files and env vars wherever convenient, or funnel them through one place.
+- **Choice**: All file/config I/O in `appio.py` and all env/XDG resolution in `appconfig.py`; the packages receive plain typed inputs.
+- **Why**: The data contract is explicit and the packages stay free of filesystem and environment assumptions.
 
-### Float-formatted cost basis
-- **Constraint**: Real cost bases are rarely whole dollars.
-- **Options**: Format cost as an integer (compact, but truncates `19.99` to `19`), or as a fixed-point float.
-- **Choice**: Format the cost column with two decimals.
-- **Why**: Accurate cost display matters more than a slightly narrower column; truncation silently misreports what the user paid.
+### Migrate-on-load vs. require a manual step
+- **Constraint**: Legacy V1 ledgers are incompatible with the multi-wallet event schema.
+- **Options**: Refuse to run until the user migrates, or upgrade transparently.
+- **Choice**: Auto-migrate on first use with a `.v1.bak` backup, plus an explicit `migrate` command and `--no-migrate` escape hatch.
+- **Why**: Existing users keep working with zero friction while the original file remains recoverable.
 
 ## Frequently Asked Questions
 
-### How do I track my own coins and amounts?
-Edit the `originalHoldings` dictionary in `CryptoPriceTracker.py`, setting each coin's `total` (how many units you hold) and `cost` (what you paid in total). To add a coin, include its CoinGecko ID both in the dictionary and in the `ids=` list of the request URL.
+### How do I install and run it?
+`python3 -m pip install .` installs the app plus `coinbasis` and `coinlytics` and gives you a `crypto-price-tracker` command. You can also run `python3 CryptoPriceTracker.py` directly once the two packages are importable.
+
+### How do I get my transactions in?
+Use `import FILE.csv` to bulk-import (columns `date,coin,action,quantity,price_usd,fee_usd`, with optional `wallet`), or `add` to enter one transaction interactively. Both append to `ledger.json`.
+
+### Which cost-basis methods are supported?
+FIFO (default), LIFO, HIFO, average-cost, and specific-ID via `--method`. Specific-ID requires `--select FILE`, a lot-selection JSON; without it the command exits with a message pointing you at an automatic method.
 
 ### Do I need a CoinGecko API key?
-No. The tool uses CoinGecko's public `simple/price` endpoint, which requires no authentication.
+No. The tool uses CoinGecko's keyless endpoints by default. Set `COINGECKO_API_KEY` (and optionally `COINGECKO_PLAN`) to use a Demo or Pro key for higher limits.
 
-### What happens if CoinGecko rate-limits me or is down?
-The request raises, `main` catches it, prints `Failed to fetch prices from CoinGecko: …` to stderr, and exits with code 1 — no partial or misleading output.
+### What happens if I'm offline or rate-limited?
+Pass `--offline` to serve only cached prices. When live and rate-limited, the run uses the last-good cache where possible (noted on stderr) or exits with a clear `Rate limited by CoinGecko…` message instead of a traceback.
 
-### Why did one of my coins not show up in the table?
-CoinGecko didn't return a usable price for it (often because the coin's ID was renamed or delisted). That coin is skipped and a `(skipped …)` notice is printed to stderr; the rest of your coins still appear.
-
-### How is "profit" calculated?
-Average cost is `cost / total`; profit is `(current_price - average_cost) * total`. So it reflects your total gain or loss on that holding at the current USD price.
-
-### Can I save the table to a file?
-Yes. Because only data rows go to stdout, `python CryptoPriceTracker.py > table.txt` captures a clean table while skip notices and errors remain on stderr.
-
-### How do I run the tests?
-Install dev dependencies with `python3 -m pip install -r requirements-dev.txt`, then run `python3 -m pytest`. The suite covers price fetching, the profit math, and each skip/error path.
+### My ledger is in the old format — will it still work?
+Yes. It is upgraded to the current multi-wallet schema automatically on first use, with the original kept at `ledger.json.v1.bak`. Run `migrate --dry-run` first if you want to preview the conversion.
